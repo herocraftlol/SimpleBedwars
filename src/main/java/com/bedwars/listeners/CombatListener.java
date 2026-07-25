@@ -17,6 +17,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.inventory.ItemStack;
@@ -56,6 +57,21 @@ public class CombatListener implements Listener {
         if (event.getDamager() instanceof Player p) return p;
         if (event.getDamager() instanceof Projectile proj && proj.getShooter() instanceof Player p) return p;
         return null;
+    }
+
+    /** Réduit (ou annule) les dégâts de chute selon le niveau de l'upgrade "Chute" de l'équipe. */
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onFallDamage(EntityDamageEvent event) {
+        if (event.getCause() != EntityDamageEvent.DamageCause.FALL) return;
+        if (!(event.getEntity() instanceof Player player)) return;
+        GameInstance game = plugin.getGameManager().findInstanceOf(player);
+        if (game == null) return;
+        double multiplier = game.getFallDamageMultiplier(player);
+        if (multiplier <= 0.0) {
+            event.setCancelled(true);
+        } else if (multiplier < 1.0) {
+            event.setDamage(event.getDamage() * multiplier);
+        }
     }
 
     /** Destruction d'un lit (cassé comme un bloc normal). */

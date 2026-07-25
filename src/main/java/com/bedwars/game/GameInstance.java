@@ -2,14 +2,21 @@ package com.bedwars.game;
 
 import com.bedwars.BedwarsPlugin;
 import com.bedwars.arena.*;
+import com.bedwars.shop.ShopConfig;
+import com.bedwars.shop.UpgradeType;
+import com.bedwars.shop.UpgradeTypeConfig;
+import com.bedwars.util.LobbyFloorManager;
 import org.bukkit.*;
+import org.bukkit.block.Block;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.LeatherArmorMeta;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.*;
@@ -24,12 +31,16 @@ public class GameInstance {
     private final Map<UUID, Integer> finalKills = new HashMap<>();
     private final Map<Generator, List<UUID>> groundItems = new HashMap<>();
     private final Set<Location> placedBlocks = new HashSet<>();
+    private final Map<Generator, TeamColor> generatorOwners = new HashMap<>();
+    private final Map<TeamColor, Long> forgeEmeraldLastSpawn = new EnumMap<>(TeamColor.class);
+    private List<Block> lobbyFloorBlocks = new ArrayList<>();
 
     private BukkitTask lobbyCountdownTask;
     private int lobbyCountdown;
 
     private BukkitTask mainTimerTask;
     private BukkitTask ironGoldTask;
+    private BukkitTask upgradeTask;
     private final Map<Generator, BukkitTask> preciousTasks = new HashMap<>();
     private BukkitTask scoreboardTask;
 
@@ -40,6 +51,7 @@ public class GameInstance {
     public GameInstance(BedwarsPlugin plugin, Arena arena) {
         this.plugin = plugin;
         this.arena = arena;
+        this.lobbyFloorBlocks = LobbyFloorManager.build(arena.getLobbyPos1(), arena.getLobbyPos2());
     }
 
     public Arena getArena() {
@@ -103,6 +115,8 @@ public class GameInstance {
     private void startGame() {
         arena.setState(ArenaState.PLAYING);
         assignTeams();
+        LobbyFloorManager.remove(lobbyFloorBlocks);
+        lobbyFloorBlocks = new ArrayList<>();
 
         for (UUID uuid : arena.getWaitingPlayers()) {
             Player player = Bukkit.getPlayer(uuid);
@@ -117,12 +131,35 @@ public class GameInstance {
             giveKit(player, color);
         }
 
+        computeGeneratorOwners();
         startGenerators();
         startMainTimer();
+        startUpgradeTask();
         scoreboardTask = Bukkit.getScheduler().runTaskTimer(plugin,
                 () -> plugin.getScoreboardManager().update(this), 0L, 20L);
 
         broadcastToArena(ChatColor.GREEN + "" + ChatColor.BOLD + "La partie commence !");
+    }
+
+    /** Détermine, pour chaque générateur fer/or, l'équipe la plus proche (pour la Forge). */
+    private void computeGeneratorOwners() {
+        generatorOwners.clear();
+        for (Generator gen : arena.getGenerators()) {
+            if (gen.getType() != GeneratorType.FER && gen.getType() != GeneratorType.OR) continue;
+            TeamColor closest = null;
+            double bestDistSq = 40.0 * 40.0;
+            for (TeamColor color : TeamColor.forTeamCount(arena.getTeamCount())) {
+                ArenaTeam team = arena.getTeams().get(color);
+                if (team == null || team.getBedLocation() == null) continue;
+                if (!team.getBedLocation().getWorld().equals(gen.getLocation().getWorld())) continue;
+                double distSq = team.getBedLocation().distanceSquared(gen.getLocation());
+                if (distSq < bestDistSq) {
+                    bestDistSq = distSq;
+                    closest = color;
+                }
+            }
+            if (closest != null) generatorOwners.put(gen, closest);
+        }
     }
 
     private void assignTeams() {
@@ -142,18 +179,59 @@ public class GameInstance {
     }
 
     private void giveKit(Player player, TeamColor color) {
-        player.getInventory().setHelmet(dyed(Material.LEATHER_HELMET, color));
-        player.getInventory().setChestplate(dyed(Material.LEATHER_CHESTPLATE, color));
-        player.getInventory().setLeggings(dyed(Material.LEATHER_LEGGINGS, color));
-        player.getInventory().setBoots(dyed(Material.LEATHER_BOOTS, color));
+        ArenaTeam team = arena.getTeams().get(color);
+        int armorLevel = team != null ? team.getUpgradeLevel(UpgradeType.ARMOR) : 1;
+        player.getInventory().setHelmet(enchantedIfNeeded(dyed(Material.LEATHER_HELMET, color), armorLevel));
+        player.getInventory().setChestplate(enchantedIfNeeded(dyed(Material.LEATHER_CHESTPLATE, color), armorLevel));
+        player.getInventory().setLeggings(enchantedIfNeeded(dyed(Material.LEATHER_LEGGINGS, color), armorLevel));
+        player.getInventory().setBoots(enchantedIfNeeded(dyed(Material.LEATHER_BOOTS, color), armorLevel));
         player.getInventory().addItem(new ItemStack(Material.WOODEN_SWORD));
+    }
+
+    private ItemStack enchantedIfNeeded(ItemStack item, int protectionLevel) {
+        if (protectionLevel > 0) {
+            item.addUnsafeEnchantment(Enchantment.PROTECTION_ENVIRONMENTAL, protectionLevel);
+        }
+        return item;
+    }
+
+    /** Ré-applique l'enchantement Protection sur l'armure déjà portée (après achat de l'upgrade Armure). */
+    public void reapplyArmorEnchant(ArenaTeam team) {
+        int level = team.getUpgradeLevel(UpgradeType.ARMOR);
+        for (UUID uuid : team.getAlivePlayers()) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p == null) continue;
+            for (ItemStack piece : new ItemStack[]{p.getInventory().getHelmet(), p.getInventory().getChestplate(),
+                    p.getInventory().getLeggings(), p.getInventory().getBoots()}) {
+                if (piece != null) piece.addUnsafeEnchantment(Enchantment.PROTECTION_ENVIRONMENTAL, level);
+            }
+        }
     }
 
     private ItemStack dyed(Material material, TeamColor color) {
         ItemStack item = new ItemStack(material);
-        LeatherArmorMeta meta = (LeatherArmorMeta) item.getItemMeta();
-        meta.setColor(color.getArmorColor());
-        item.setItemMeta(meta);
+        org.bukkit.inventory.meta.ItemMeta meta = item.getItemMeta();
+        try {
+            // Try to use setColor method if available (LeatherArmorMeta or ItemMeta)
+            java.lang.reflect.Method setColor = meta.getClass().getMethod("setColor", org.bukkit.Color.class);
+            setColor.invoke(meta, color.getArmorColor());
+            item.setItemMeta(meta);
+        } catch (NoSuchMethodException e) {
+            // Method not available, try NBT approach via CraftItemStack
+            try {
+                Class<?> craftClass = Class.forName("org.bukkit.craftbukkit.inventory.CraftItemStack");
+                Object nmsItem = craftClass.getMethod("asNMSCopy", ItemStack.class).invoke(null, item);
+                Object tag = nmsItem.getClass().getMethod("getOrCreateTag").invoke(nmsItem);
+                Object display = Class.forName("net.minecraft.nbt.NBTTagCompound").getConstructor().newInstance();
+                display.getClass().getMethod("setInt", String.class, int.class).invoke(display, "color", color.getArmorColor().asRGB());
+                tag.getClass().getMethod("set", String.class, Class.forName("net.minecraft.nbt.NBTBase")).invoke(tag, "display", display);
+                item = (ItemStack) craftClass.getMethod("asBukkitCopy", nmsItem.getClass()).invoke(null, nmsItem);
+            } catch (Exception ex) {
+                // Silently fail - armor will be uncolored
+            }
+        } catch (Exception e) {
+            plugin.getLogger().warning("Could not dye armor: " + e.getMessage());
+        }
         return item;
     }
 
@@ -166,9 +244,7 @@ public class GameInstance {
             for (Generator gen : arena.getGenerators()) {
                 if (gen.getType() != GeneratorType.FER && gen.getType() != GeneratorType.OR) continue;
                 gen.incrementTick();
-                long interval = gen.getType() == GeneratorType.FER
-                        ? plugin.getConfig().getLong("generators.iron-interval-ticks", 20)
-                        : plugin.getConfig().getLong("generators.gold-interval-ticks", 80);
+                long interval = forgeAdjustedInterval(gen);
                 if (gen.getTickCounter() >= interval) {
                     gen.resetTick();
                     spawnSplitResource(gen);
@@ -180,6 +256,31 @@ public class GameInstance {
             if (gen.getType() == GeneratorType.DIAMOND || gen.getType() == GeneratorType.EMERAUDE) {
                 schedulePreciousGenerator(gen);
             }
+        }
+    }
+
+    private long forgeAdjustedInterval(Generator gen) {
+        TeamColor owner = generatorOwners.get(gen);
+        int forgeLevel = 1;
+        if (owner != null) {
+            ArenaTeam team = arena.getTeams().get(owner);
+            if (team != null) forgeLevel = team.getUpgradeLevel(UpgradeType.FORGE);
+        }
+        if (gen.getType() == GeneratorType.FER) {
+            return switch (forgeLevel) {
+                case 1 -> plugin.getConfig().getLong("generators.iron-interval-ticks", 20);
+                case 2 -> 15L;
+                case 3 -> 10L;
+                default -> 5L; // niveau 4 et 5
+            };
+        } else {
+            return switch (forgeLevel) {
+                case 1 -> plugin.getConfig().getLong("generators.gold-interval-ticks", 80);
+                case 2 -> 60L;
+                case 3 -> 45L;
+                case 4 -> 30L;
+                default -> 20L; // niveau 5
+            };
         }
     }
 
@@ -301,10 +402,13 @@ public class GameInstance {
             if (team == null || team.getBedLocation() == null) continue;
             if (team.isEliminated()) continue;
             Location spawnLoc = team.getBedLocation().clone().add(0, height, 0);
-            EnderDragon dragon = (EnderDragon) spawnLoc.getWorld().spawnEntity(spawnLoc, EntityType.ENDER_DRAGON);
-            dragon.setCustomName(color.getColoredName() + " Dragon");
-            dragon.setCustomNameVisible(true);
-            dragons.add(dragon);
+            dragons.add(spawnDragonFor(color, spawnLoc));
+
+            if (team.getUpgradeLevel(UpgradeType.DRAGON) >= 1) {
+                Location secondSpawnLoc = team.getBedLocation().clone().add(3, height + 3, 3);
+                dragons.add(spawnDragonFor(color, secondSpawnLoc));
+                broadcastToArena(color.getColoredName() + ChatColor.GRAY + " bénéficie d'un second dragon (Dragon Buff) !");
+            }
         }
 
         // Tâche périodique : chaque dragon vise un joueur d'une autre équipe.
@@ -319,6 +423,13 @@ public class GameInstance {
                 }
             }
         }, 0L, 60L);
+    }
+
+    private EnderDragon spawnDragonFor(TeamColor color, Location spawnLoc) {
+        EnderDragon dragon = (EnderDragon) spawnLoc.getWorld().spawnEntity(spawnLoc, EntityType.ENDER_DRAGON);
+        dragon.setCustomName(color.getColoredName() + " Dragon");
+        dragon.setCustomNameVisible(true);
+        return dragon;
     }
 
     private TeamColor teamColorFromDragonName(String name) {
@@ -338,6 +449,192 @@ public class GameInstance {
         }
         if (candidates.isEmpty()) return null;
         return candidates.get(new Random().nextInt(candidates.size()));
+    }
+
+    // ---------------------------------------------------------------
+    // Achat et effets des améliorations d'équipe (villageois Upgrade)
+    // ---------------------------------------------------------------
+
+    /**
+     * Achète/améliore une upgrade pour l'équipe du joueur. Les upgrades à palier
+     * (Sharp, Armure, Maniac, Chute, Forge) démarrent toutes au niveau 1 (le niveau
+     * de base, sans bonus particulier sauf pour la Forge) et progressent d'un niveau
+     * à chaque achat. Heal Boost et Dragon Buff sont des achats uniques. Les pièges
+     * (TrapA/TrapC/TrapM) sont à usage unique : il faut les racheter après déclenchement.
+     */
+    public void purchaseUpgrade(Player player, ArenaTeam team, UpgradeType type) {
+        ShopConfig config = plugin.getShopConfigManager().getConfig();
+        UpgradeTypeConfig cfg = config.getUpgradeConfig(type);
+
+        if (type.isTrap()) {
+            if (team.isTrapArmed(type)) {
+                player.sendMessage(ChatColor.YELLOW + "Ce piège est déjà armé.");
+                return;
+            }
+            int level = team.getUpgradeLevel(type);
+            int price = cfg.getPriceForLevel(level);
+            if (!chargeDiamonds(player, price)) return;
+            team.setTrapArmed(type, true);
+            broadcastToTeam(team, ChatColor.GREEN + "Piège " + type.getLabel() + " armé (niveau " + level + ").");
+            return;
+        }
+
+        if (!type.isLeveled()) {
+            if (team.getUpgradeLevel(type) >= 1) {
+                player.sendMessage(ChatColor.YELLOW + type.getLabel() + " est déjà actif pour votre équipe.");
+                return;
+            }
+            int price = cfg.getPriceForLevel(1);
+            if (!chargeDiamonds(player, price)) return;
+            team.setUpgradeLevel(type, 1);
+            broadcastToTeam(team, ChatColor.GREEN + type.getLabel() + " activé pour l'équipe !");
+            return;
+        }
+
+        int currentLevel = team.getUpgradeLevel(type);
+        int max = cfg.getMaxLevel();
+        if (currentLevel >= max) {
+            player.sendMessage(ChatColor.YELLOW + type.getLabel() + " est déjà au niveau maximum.");
+            return;
+        }
+        int nextLevel = currentLevel + 1;
+        int price = cfg.getPriceForLevel(nextLevel);
+        if (!chargeDiamonds(player, price)) return;
+        team.setUpgradeLevel(type, nextLevel);
+        broadcastToTeam(team, ChatColor.GREEN + type.getLabel() + " amélioré au niveau " + nextLevel + " !");
+        if (type == UpgradeType.ARMOR) reapplyArmorEnchant(team);
+    }
+
+    private boolean chargeDiamonds(Player player, int price) {
+        int have = 0;
+        for (ItemStack item : player.getInventory().getContents()) {
+            if (item != null && item.getType() == Material.DIAMOND) have += item.getAmount();
+        }
+        if (have < price) {
+            player.sendMessage(ChatColor.RED + "Il vous manque " + (price - have) + " diamant(s) pour cet achat.");
+            return false;
+        }
+        int remaining = price;
+        ItemStack[] contents = player.getInventory().getContents();
+        for (int i = 0; i < contents.length && remaining > 0; i++) {
+            ItemStack item = contents[i];
+            if (item == null || item.getType() != Material.DIAMOND) continue;
+            int take = Math.min(remaining, item.getAmount());
+            item.setAmount(item.getAmount() - take);
+            remaining -= take;
+            if (item.getAmount() <= 0) player.getInventory().setItem(i, null);
+        }
+        return true;
+    }
+
+    private void broadcastToTeam(ArenaTeam team, String message) {
+        for (UUID uuid : team.getMembers()) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null) p.sendMessage(message);
+        }
+    }
+
+    /** Tâche périodique (1x/seconde) : auras Sharp/Maniac/Heal Boost, pièges, bonus Forge. */
+    private void startUpgradeTask() {
+        upgradeTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            for (TeamColor color : TeamColor.forTeamCount(arena.getTeamCount())) {
+                ArenaTeam team = arena.getTeams().get(color);
+                if (team == null || team.isEliminated()) continue;
+                applyAuraEffects(team);
+                checkForgeEmeraldBonus(color, team);
+                checkTraps(color, team);
+            }
+        }, 40L, 20L);
+    }
+
+    private void applyAuraEffects(ArenaTeam team) {
+        int sharpLevel = team.getUpgradeLevel(UpgradeType.SHARP);
+        int maniacLevel = team.getUpgradeLevel(UpgradeType.MANIAC);
+        boolean healBoost = team.getUpgradeLevel(UpgradeType.HEAL) >= 1;
+
+        for (UUID uuid : team.getAlivePlayers()) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p == null) continue;
+            if (sharpLevel >= 1) {
+                p.addPotionEffect(new PotionEffect(PotionEffectType.INCREASE_DAMAGE, 60, sharpLevel - 1, true, false));
+            }
+            if (maniacLevel >= 1) {
+                p.addPotionEffect(new PotionEffect(PotionEffectType.FAST_DIGGING, 60, maniacLevel - 1, true, false));
+            }
+            if (healBoost && team.getBedLocation() != null
+                    && p.getWorld().equals(team.getBedLocation().getWorld())
+                    && p.getLocation().distanceSquared(team.getBedLocation()) <= 20.0 * 20.0) {
+                p.addPotionEffect(new PotionEffect(PotionEffectType.REGENERATION, 60, 0, true, false));
+            }
+        }
+    }
+
+    /** Fraction de dégâts de chute conservée (0 = plus aucun dégât) selon le niveau "Chute". */
+    public double getFallDamageMultiplier(Player player) {
+        TeamColor color = playerTeams.get(player.getUniqueId());
+        if (color == null) return 1.0;
+        ArenaTeam team = arena.getTeams().get(color);
+        if (team == null) return 1.0;
+        UpgradeTypeConfig cfg = plugin.getShopConfigManager().getConfig().getUpgradeConfig(UpgradeType.CHUTE);
+        int level = team.getUpgradeLevel(UpgradeType.CHUTE);
+        int max = Math.max(cfg.getMaxLevel(), 1);
+        double reduction = Math.min(1.0, (double) level / max);
+        return 1.0 - reduction;
+    }
+
+    private void checkForgeEmeraldBonus(TeamColor color, ArenaTeam team) {
+        int forgeLevel = team.getUpgradeLevel(UpgradeType.FORGE);
+        if (forgeLevel < 4 || team.getBedLocation() == null) return;
+        long intervalSeconds = forgeLevel >= 5 ? 30L : 45L;
+        long now = elapsedSeconds;
+        long last = forgeEmeraldLastSpawn.getOrDefault(color, -intervalSeconds);
+        if (now - last < intervalSeconds) return;
+        forgeEmeraldLastSpawn.put(color, now);
+        team.getBedLocation().getWorld().dropItem(team.getBedLocation().clone().add(0.5, 1.2, 0.5),
+                new ItemStack(Material.EMERALD, 1));
+    }
+
+    private void checkTraps(TeamColor color, ArenaTeam team) {
+        if (team.getBedLocation() == null) return;
+        for (UpgradeType trap : new UpgradeType[]{UpgradeType.TRAP_ALARM, UpgradeType.TRAP_BLIND, UpgradeType.TRAP_MINER}) {
+            if (!team.isTrapArmed(trap)) continue;
+            int level = team.getUpgradeLevel(trap);
+            double radius = level >= 2 ? 20.0 : 10.0;
+            List<Player> enemies = findEnemiesNear(color, team.getBedLocation(), radius);
+            if (enemies.isEmpty()) continue;
+
+            team.setTrapArmed(trap, false);
+            switch (trap) {
+                case TRAP_ALARM -> broadcastToTeam(team, ChatColor.RED + "" + ChatColor.BOLD
+                        + "ALARME ! " + ChatColor.RESET + ChatColor.GRAY + "Un ennemi approche de votre lit !");
+                case TRAP_BLIND -> {
+                    for (Player enemy : enemies) {
+                        enemy.addPotionEffect(new PotionEffect(PotionEffectType.BLINDNESS, 100, 0));
+                    }
+                    broadcastToTeam(team, ChatColor.GRAY + "Le piège de cécité s'est déclenché !");
+                }
+                case TRAP_MINER -> {
+                    int amplifier = level >= 2 ? 2 : 1;
+                    for (Player enemy : enemies) {
+                        enemy.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_DIGGING, 160, amplifier));
+                    }
+                    broadcastToTeam(team, ChatColor.GRAY + "Le piège du mineur s'est déclenché !");
+                }
+                default -> {}
+            }
+        }
+    }
+
+    private List<Player> findEnemiesNear(TeamColor ownTeam, Location center, double radius) {
+        List<Player> result = new ArrayList<>();
+        for (Map.Entry<UUID, TeamColor> entry : playerTeams.entrySet()) {
+            if (entry.getValue() == ownTeam) continue;
+            Player p = Bukkit.getPlayer(entry.getKey());
+            if (p == null || !isAlivePlaying(p)) continue;
+            if (!p.getWorld().equals(center.getWorld())) continue;
+            if (p.getLocation().distanceSquared(center) <= radius * radius) result.add(p);
+        }
+        return result;
     }
 
     // ---------------------------------------------------------------
@@ -449,7 +746,7 @@ public class GameInstance {
         Location loc = team.getSpawnLocation();
         for (int i = 0; i < 5; i++) {
             Bukkit.getScheduler().runTaskLater(plugin, () -> {
-                org.bukkit.entity.Firework fw = (org.bukkit.entity.Firework) loc.getWorld().spawnEntity(loc, EntityType.FIREWORK_ROCKET);
+                org.bukkit.entity.Firework fw = (org.bukkit.entity.Firework) loc.getWorld().spawnEntity(loc, EntityType.FIREWORK);
                 org.bukkit.inventory.meta.FireworkMeta meta = fw.getFireworkMeta();
                 meta.addEffect(org.bukkit.FireworkEffect.builder()
                         .withColor(org.bukkit.Color.fromRGB(winner.getArmorColor().asRGB()))
@@ -488,6 +785,7 @@ public class GameInstance {
         if (lobbyCountdownTask != null) lobbyCountdownTask.cancel();
         if (mainTimerTask != null) mainTimerTask.cancel();
         if (ironGoldTask != null) ironGoldTask.cancel();
+        if (upgradeTask != null) upgradeTask.cancel();
         if (scoreboardTask != null) scoreboardTask.cancel();
         for (BukkitTask task : preciousTasks.values()) task.cancel();
     }

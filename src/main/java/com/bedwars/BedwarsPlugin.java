@@ -3,13 +3,16 @@ package com.bedwars;
 import com.bedwars.arena.ArenaManager;
 import com.bedwars.commands.BedwarsCommand;
 import com.bedwars.game.GameManager;
-import com.bedwars.gui.AdminGUIManager;
-import com.bedwars.gui.AdminNPCManager;
+import com.bedwars.gui.JoinGUIManager;
 import com.bedwars.listeners.CombatListener;
 import com.bedwars.listeners.GUIListener;
 import com.bedwars.listeners.OreMergeListener;
 import com.bedwars.listeners.PlayerProtectionListener;
+import com.bedwars.listeners.ShopListener;
+import com.bedwars.npc.HumanNPCManager;
 import com.bedwars.scoreboard.ScoreboardManager;
+import com.bedwars.shop.ShopConfigManager;
+import com.bedwars.shop.ShopGUIManager;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class BedwarsPlugin extends JavaPlugin {
@@ -19,8 +22,10 @@ public class BedwarsPlugin extends JavaPlugin {
     private ArenaManager arenaManager;
     private GameManager gameManager;
     private ScoreboardManager scoreboardManager;
-    private AdminNPCManager adminNPCManager;
-    private AdminGUIManager adminGUIManager;
+    private JoinGUIManager joinGUIManager;
+    private ShopConfigManager shopConfigManager;
+    private ShopGUIManager shopGUIManager;
+    private HumanNPCManager humanNPCManager;
 
     @Override
     public void onEnable() {
@@ -30,11 +35,14 @@ public class BedwarsPlugin extends JavaPlugin {
         this.arenaManager = new ArenaManager(this);
         this.scoreboardManager = new ScoreboardManager();
         this.gameManager = new GameManager(this);
-        this.adminNPCManager = new AdminNPCManager(this);
-        this.adminGUIManager = new AdminGUIManager(this);
+        this.joinGUIManager = new JoinGUIManager(this);
+        this.shopConfigManager = new ShopConfigManager(this);
+        this.shopGUIManager = new ShopGUIManager(this);
+        this.humanNPCManager = new HumanNPCManager(this);
 
         arenaManager.loadAll();
-        adminNPCManager.load();
+        shopConfigManager.load();
+        humanNPCManager.load();
 
         BedwarsCommand command = new BedwarsCommand(this);
         getCommand("bd").setExecutor(command);
@@ -44,6 +52,7 @@ public class BedwarsPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new OreMergeListener(this), this);
         getServer().getPluginManager().registerEvents(new GUIListener(this), this);
         getServer().getPluginManager().registerEvents(new PlayerProtectionListener(this), this);
+        getServer().getPluginManager().registerEvents(new ShopListener(this), this);
 
         getLogger().info("BedwarsPlugin activé — " + arenaManager.getArenas().size() + " arène(s) chargée(s).");
     }
@@ -53,8 +62,11 @@ public class BedwarsPlugin extends JavaPlugin {
         if (gameManager != null) {
             gameManager.shutdownAll();
         }
-        if (adminNPCManager != null) {
-            adminNPCManager.removeNPC();
+        if (shopConfigManager != null) {
+            shopConfigManager.save();
+        }
+        if (humanNPCManager != null) {
+            humanNPCManager.removeAll();
         }
     }
 
@@ -74,11 +86,19 @@ public class BedwarsPlugin extends JavaPlugin {
         return scoreboardManager;
     }
 
-    public AdminNPCManager getAdminNPCManager() {
-        return adminNPCManager;
+    public JoinGUIManager getJoinGUIManager() {
+        return joinGUIManager;
     }
 
-    public AdminGUIManager getAdminGUIManager() {
-        return adminGUIManager;
+    public ShopConfigManager getShopConfigManager() {
+        return shopConfigManager;
+    }
+
+    public ShopGUIManager getShopGUIManager() {
+        return shopGUIManager;
+    }
+
+    public HumanNPCManager getHumanNPCManager() {
+        return humanNPCManager;
     }
 }

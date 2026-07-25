@@ -1,8 +1,11 @@
 package com.bedwars.arena;
 
+import com.bedwars.shop.UpgradeType;
 import org.bukkit.Location;
 
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -24,6 +27,10 @@ public class ArenaTeam {
     private boolean bedDestroyed = false;
     private final Set<UUID> members = new LinkedHashSet<>();
     private final Set<UUID> alivePlayers = new LinkedHashSet<>();
+
+    // Améliorations d'équipe (réinitialisées à chaque partie)
+    private final Map<UpgradeType, Integer> upgradeLevels = new EnumMap<>(UpgradeType.class);
+    private final Map<UpgradeType, Boolean> trapArmed = new EnumMap<>(UpgradeType.class);
 
     public ArenaTeam(TeamColor color, int maxPlayers) {
         this.color = color;
@@ -99,10 +106,31 @@ public class ArenaTeam {
                 && shopLocation != null && upgradeLocation != null;
     }
 
+    public int getUpgradeLevel(UpgradeType type) {
+        if (!type.isLeveled()) {
+            return upgradeLevels.getOrDefault(type, 0); // 0 = pas acheté, 1 = acheté (Heal/Dragon)
+        }
+        return upgradeLevels.getOrDefault(type, 1); // les upgrades à palier démarrent à 1 (base)
+    }
+
+    public void setUpgradeLevel(UpgradeType type, int level) {
+        upgradeLevels.put(type, level);
+    }
+
+    public boolean isTrapArmed(UpgradeType type) {
+        return trapArmed.getOrDefault(type, false);
+    }
+
+    public void setTrapArmed(UpgradeType type, boolean armed) {
+        trapArmed.put(type, armed);
+    }
+
     /** Réinitialise l'état runtime pour une nouvelle partie (garde la config). */
     public void resetRuntime() {
         bedDestroyed = false;
         members.clear();
         alivePlayers.clear();
+        upgradeLevels.clear();
+        trapArmed.clear();
     }
 }
