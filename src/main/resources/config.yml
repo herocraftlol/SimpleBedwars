@@ -1,0 +1,29 @@
+# Configuration du plugin BedwarsPlugin
+
+game:
+  countdown-lobby-seconds: 10
+  game-duration-minutes: 45
+  sudden-death-dragon-height-above-bed: 20
+  end-reset-delay-seconds: 10
+
+lobby:
+  height-above-map: 15    # hauteur de la plateforme de lobby flottante au-dessus de la map
+  platform-radius: 4      # rayon de la plateforme (2*rayon+1 de côté), centrée sur la map
+
+spectator:
+  cage-radius: 4          # rayon de la cage de blocs invisibles autour du spawn spectateur
+  cage-height: 4          # hauteur de la cage au-dessus du spawn spectateur
+
+generators:
+  iron-interval-ticks: 20
+  gold-interval-ticks: 80
+  diamond-interval-seconds: 30
+  emerald-interval-seconds: 45
+  diamond-interval-seconds-phase2: 20   # à 25 minutes
+  emerald-interval-seconds-phase2: 30
+  diamond-interval-seconds-phase3: 10   # à 5 minutes
+  emerald-interval-seconds-phase3: 15
+  diamond-max-per-spawner: 8
+  emerald-max-per-spawner: 4
+  phase2-minute: 25
+  phase3-minute: 5
