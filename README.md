@@ -74,7 +74,7 @@ com.bedwars
 
 ## 🆕 Changelog
 
-### v1.0.1
+### v1.0.3
 - **Correction** : Import LeatherArmorMeta corrigé pour Paper 1.21
 - **Pré-compilé** : JAR prêt à l'emploi disponible
 
