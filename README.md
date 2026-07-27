@@ -119,6 +119,10 @@ com.bedwars
 
 ## 🆕 Historique des Versions
 
+### v1.0.4
+- Mise à jour du plugin Bedwars pour Paper 1.21
+- Compilation et publication via CI/CD
+
 ### v1.0.2
 - Ajout du système de shop configurable avec GUI personnalisé
 - Ajout des améliorations d'équipe (Heal, Sharp, Armur, Maniac, etc.)
