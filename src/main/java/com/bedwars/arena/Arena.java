@@ -24,12 +24,9 @@ public class Arena {
     private Location gamePos2;
     private boolean gameZoneConfirmed = false;
 
-    // Zone du lobby / zone d'attente
-    private Location lobbyPos1;
-    private Location lobbyPos2;
-    private boolean lobbyZoneConfirmed = false;
-
-    // Spawn des spectateurs (avec confinement à la zone du lobby)
+    // Spawn des spectateurs / centre du lobby d'attente.
+    // Une cage invisible (voir WaitingLobbyManager) est construite automatiquement
+    // au-dessus de la map, centrée sur cet emplacement, tant que des joueurs attendent.
     private Location specLocation;
 
     private boolean saved = false; // true = configuration validée par /bd <nom> save
@@ -102,30 +99,6 @@ public class Arena {
         this.gameZoneConfirmed = gameZoneConfirmed;
     }
 
-    public Location getLobbyPos1() {
-        return lobbyPos1;
-    }
-
-    public void setLobbyPos1(Location lobbyPos1) {
-        this.lobbyPos1 = lobbyPos1;
-    }
-
-    public Location getLobbyPos2() {
-        return lobbyPos2;
-    }
-
-    public void setLobbyPos2(Location lobbyPos2) {
-        this.lobbyPos2 = lobbyPos2;
-    }
-
-    public boolean isLobbyZoneConfirmed() {
-        return lobbyZoneConfirmed;
-    }
-
-    public void setLobbyZoneConfirmed(boolean lobbyZoneConfirmed) {
-        this.lobbyZoneConfirmed = lobbyZoneConfirmed;
-    }
-
     public Location getSpecLocation() {
         return specLocation;
     }
@@ -170,8 +143,7 @@ public class Arena {
         List<String> missing = new ArrayList<>();
         if (teamCount <= 0) missing.add("nombre d'équipes (/bd " + name + " equipe <nb> <joueurs>)");
         if (!gameZoneConfirmed) missing.add("zone de jeu (/bd " + name + " pos1/pos2/posconfirm)");
-        if (!lobbyZoneConfirmed) missing.add("zone d'attente (/bd " + name + " lobby pos1/pos2/posconfirm)");
-        if (specLocation == null) missing.add("spawn des spectateurs (/bd " + name + " spec)");
+        if (specLocation == null) missing.add("centre du lobby d'attente / spawn spectateurs (/bd " + name + " spec)");
 
         if (teamCount > 0) {
             for (TeamColor color : TeamColor.forTeamCount(teamCount)) {

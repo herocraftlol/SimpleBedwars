@@ -3,16 +3,21 @@ package com.bedwars;
 import com.bedwars.arena.ArenaManager;
 import com.bedwars.commands.BedwarsCommand;
 import com.bedwars.game.GameManager;
-import com.bedwars.gui.JoinGUIManager;
+import com.bedwars.game.WaitingLobbyManager;
+import com.bedwars.gui.AdminGUIManager;
+import com.bedwars.gui.AdminNPCManager;
 import com.bedwars.listeners.CombatListener;
 import com.bedwars.listeners.GUIListener;
+import com.bedwars.listeners.KitProtectionListener;
 import com.bedwars.listeners.OreMergeListener;
 import com.bedwars.listeners.PlayerProtectionListener;
 import com.bedwars.listeners.ShopListener;
-import com.bedwars.npc.HumanNPCManager;
+import com.bedwars.npc.ShopNpcManager;
 import com.bedwars.scoreboard.ScoreboardManager;
 import com.bedwars.shop.ShopConfigManager;
 import com.bedwars.shop.ShopGUIManager;
+import com.bedwars.upgrade.UpgradeGUIManager;
+import com.bedwars.util.KitProtectionUtil;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public class BedwarsPlugin extends JavaPlugin {
@@ -22,27 +27,35 @@ public class BedwarsPlugin extends JavaPlugin {
     private ArenaManager arenaManager;
     private GameManager gameManager;
     private ScoreboardManager scoreboardManager;
-    private JoinGUIManager joinGUIManager;
-    private ShopConfigManager shopConfigManager;
+    private AdminNPCManager adminNPCManager;
+    private AdminGUIManager adminGUIManager;
+    private WaitingLobbyManager waitingLobbyManager;
+    private ShopNpcManager shopNpcManager;
     private ShopGUIManager shopGUIManager;
-    private HumanNPCManager humanNPCManager;
+    private ShopConfigManager shopConfigManager;
+    private UpgradeGUIManager upgradeGUIManager;
 
     @Override
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
+        KitProtectionUtil.init(this);
 
         this.arenaManager = new ArenaManager(this);
         this.scoreboardManager = new ScoreboardManager();
         this.gameManager = new GameManager(this);
-        this.joinGUIManager = new JoinGUIManager(this);
+        this.adminNPCManager = new AdminNPCManager(this);
+        this.adminGUIManager = new AdminGUIManager(this);
+        this.waitingLobbyManager = new WaitingLobbyManager(this);
+        this.shopNpcManager = new ShopNpcManager(this);
         this.shopConfigManager = new ShopConfigManager(this);
         this.shopGUIManager = new ShopGUIManager(this);
-        this.humanNPCManager = new HumanNPCManager(this);
+        this.upgradeGUIManager = new UpgradeGUIManager(this);
 
         arenaManager.loadAll();
+        adminNPCManager.load();
         shopConfigManager.load();
-        humanNPCManager.load();
+        shopNpcManager.spawnAll();
 
         BedwarsCommand command = new BedwarsCommand(this);
         getCommand("bd").setExecutor(command);
@@ -53,6 +66,7 @@ public class BedwarsPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new GUIListener(this), this);
         getServer().getPluginManager().registerEvents(new PlayerProtectionListener(this), this);
         getServer().getPluginManager().registerEvents(new ShopListener(this), this);
+        getServer().getPluginManager().registerEvents(new KitProtectionListener(this), this);
 
         getLogger().info("BedwarsPlugin activé — " + arenaManager.getArenas().size() + " arène(s) chargée(s).");
     }
@@ -62,11 +76,11 @@ public class BedwarsPlugin extends JavaPlugin {
         if (gameManager != null) {
             gameManager.shutdownAll();
         }
-        if (shopConfigManager != null) {
-            shopConfigManager.save();
+        if (adminNPCManager != null) {
+            adminNPCManager.removeNPC();
         }
-        if (humanNPCManager != null) {
-            humanNPCManager.removeAll();
+        if (shopNpcManager != null) {
+            shopNpcManager.removeAll();
         }
     }
 
@@ -86,19 +100,31 @@ public class BedwarsPlugin extends JavaPlugin {
         return scoreboardManager;
     }
 
-    public JoinGUIManager getJoinGUIManager() {
-        return joinGUIManager;
+    public AdminNPCManager getAdminNPCManager() {
+        return adminNPCManager;
     }
 
-    public ShopConfigManager getShopConfigManager() {
-        return shopConfigManager;
+    public AdminGUIManager getAdminGUIManager() {
+        return adminGUIManager;
+    }
+
+    public WaitingLobbyManager getWaitingLobbyManager() {
+        return waitingLobbyManager;
+    }
+
+    public ShopNpcManager getShopNpcManager() {
+        return shopNpcManager;
     }
 
     public ShopGUIManager getShopGUIManager() {
         return shopGUIManager;
     }
 
-    public HumanNPCManager getHumanNPCManager() {
-        return humanNPCManager;
+    public ShopConfigManager getShopConfigManager() {
+        return shopConfigManager;
+    }
+
+    public UpgradeGUIManager getUpgradeGUIManager() {
+        return upgradeGUIManager;
     }
 }

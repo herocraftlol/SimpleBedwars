@@ -36,89 +36,6 @@ public class ArenaManager {
         return arenas.get(name.toLowerCase());
     }
 
-    /** Supprime entièrement une arène (toute la configuration + les fichiers). */
-    public boolean deleteArena(String name) {
-        Arena arena = arenas.remove(name.toLowerCase());
-        if (arena == null) return false;
-        File configFile = new File(arenasFolder, name.toLowerCase() + ".yml");
-        File regionFile = getRegionFile(arena);
-        if (configFile.exists()) configFile.delete();
-        if (regionFile.exists()) regionFile.delete();
-        return true;
-    }
-
-    /**
-     * Supprime l'élément de configuration correspondant exactement à l'emplacement donné
-     * (lit, spawn, shop, upgrade, spec, générateur...). Retourne une description de ce qui
-     * a été supprimé, ou null si rien ne correspondait à cet emplacement.
-     */
-    public String deleteAtLocation(Arena arena, Location location) {
-        if (arena.getSpecLocation() != null && sameBlock(arena.getSpecLocation(), location)) {
-            arena.setSpecLocation(null);
-            return "spawn des spectateurs";
-        }
-        for (TeamColor color : TeamColor.values()) {
-            ArenaTeam team = arena.getTeams().get(color);
-            if (team == null) continue;
-            if (team.getBedLocation() != null && sameBlock(team.getBedLocation(), location)) {
-                team.setBedLocation(null);
-                return "lit de l'équipe " + color.getDisplayName();
-            }
-            if (team.getSpawnLocation() != null && sameBlock(team.getSpawnLocation(), location)) {
-                team.setSpawnLocation(null);
-                return "spawn de l'équipe " + color.getDisplayName();
-            }
-            if (team.getShopLocation() != null && sameBlock(team.getShopLocation(), location)) {
-                team.setShopLocation(null);
-                return "shop de l'équipe " + color.getDisplayName();
-            }
-            if (team.getUpgradeLocation() != null && sameBlock(team.getUpgradeLocation(), location)) {
-                team.setUpgradeLocation(null);
-                return "upgrade de l'équipe " + color.getDisplayName();
-            }
-        }
-        Generator toRemove = null;
-        for (Generator gen : arena.getGenerators()) {
-            if (sameBlock(gen.getLocation(), location)) {
-                toRemove = gen;
-                break;
-            }
-        }
-        if (toRemove != null) {
-            arena.getGenerators().remove(toRemove);
-            return "générateur de " + toRemove.getType().name().toLowerCase();
-        }
-        if (arena.getGamePos1() != null && sameBlock(arena.getGamePos1(), location)) {
-            arena.setGamePos1(null);
-            arena.setGameZoneConfirmed(false);
-            return "position 1 de la zone de jeu";
-        }
-        if (arena.getGamePos2() != null && sameBlock(arena.getGamePos2(), location)) {
-            arena.setGamePos2(null);
-            arena.setGameZoneConfirmed(false);
-            return "position 2 de la zone de jeu";
-        }
-        if (arena.getLobbyPos1() != null && sameBlock(arena.getLobbyPos1(), location)) {
-            arena.setLobbyPos1(null);
-            arena.setLobbyZoneConfirmed(false);
-            return "position 1 de la zone d'attente";
-        }
-        if (arena.getLobbyPos2() != null && sameBlock(arena.getLobbyPos2(), location)) {
-            arena.setLobbyPos2(null);
-            arena.setLobbyZoneConfirmed(false);
-            return "position 2 de la zone d'attente";
-        }
-        return null;
-    }
-
-    private boolean sameBlock(Location a, Location b) {
-        if (a == null || b == null || a.getWorld() == null || b.getWorld() == null) return false;
-        return a.getWorld().equals(b.getWorld())
-                && a.getBlockX() == b.getBlockX()
-                && a.getBlockY() == b.getBlockY()
-                && a.getBlockZ() == b.getBlockZ();
-    }
-
     public Map<String, Arena> getArenas() {
         return arenas;
     }
@@ -157,12 +74,9 @@ public class ArenaManager {
         config.set("playersPerTeam", arena.getPlayersPerTeam());
         config.set("saved", arena.isSaved());
         config.set("gameZoneConfirmed", arena.isGameZoneConfirmed());
-        config.set("lobbyZoneConfirmed", arena.isLobbyZoneConfirmed());
 
         LocationUtil.save(config, "gamePos1", arena.getGamePos1());
         LocationUtil.save(config, "gamePos2", arena.getGamePos2());
-        LocationUtil.save(config, "lobbyPos1", arena.getLobbyPos1());
-        LocationUtil.save(config, "lobbyPos2", arena.getLobbyPos2());
         LocationUtil.save(config, "spec", arena.getSpecLocation());
 
         for (TeamColor color : TeamColor.values()) {
@@ -212,12 +126,9 @@ public class ArenaManager {
         arena.setPlayersPerTeam(config.getInt("playersPerTeam", 0));
         arena.setSaved(config.getBoolean("saved", false));
         arena.setGameZoneConfirmed(config.getBoolean("gameZoneConfirmed", false));
-        arena.setLobbyZoneConfirmed(config.getBoolean("lobbyZoneConfirmed", false));
 
         arena.setGamePos1(LocationUtil.load(config, "gamePos1"));
         arena.setGamePos2(LocationUtil.load(config, "gamePos2"));
-        arena.setLobbyPos1(LocationUtil.load(config, "lobbyPos1"));
-        arena.setLobbyPos2(LocationUtil.load(config, "lobbyPos2"));
         arena.setSpecLocation(LocationUtil.load(config, "spec"));
 
         if (config.isConfigurationSection("teams")) {
@@ -253,5 +164,24 @@ public class ArenaManager {
 
         arena.setState(ArenaState.SETUP);
         arenas.put(name.toLowerCase(), arena);
+    }
+
+    /**
+     * Supprime intégralement une arène : fichier de configuration, fichier de région
+     * sauvegardée, et entrée en mémoire. Ne s'occupe pas des NPC / instances de partie
+     * en cours : cela doit être géré par l'appelant (voir BedwarsCommand#handleDeleteConfirm).
+     */
+    public void deleteArena(Arena arena) {
+        arenas.remove(arena.getName().toLowerCase());
+
+        File configFile = new File(arenasFolder, arena.getName().toLowerCase() + ".yml");
+        if (configFile.exists() && !configFile.delete()) {
+            plugin.getLogger().warning("Impossible de supprimer le fichier " + configFile.getName());
+        }
+
+        File regionFile = getRegionFile(arena);
+        if (regionFile.exists() && !regionFile.delete()) {
+            plugin.getLogger().warning("Impossible de supprimer le fichier " + regionFile.getName());
+        }
     }
 }

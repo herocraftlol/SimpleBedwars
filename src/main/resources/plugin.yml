@@ -1,15 +1,14 @@
 name: BedwarsPlugin
 main: com.bedwars.BedwarsPlugin
-version: 1.0.0
+version: 1.0.5
 api-version: '1.21'
 author: Claude
 description: Plugin BedWars entièrement configurable en jeu via /bd
-softdepend: [ProtocolLib]
 
 commands:
   bd:
     description: Commande principale du plugin Bedwars
-    usage: /bd <create|gui|join|shop|...>
+    usage: /bd <create|admin|join|...>
 
 permissions:
   bedwars.admin:

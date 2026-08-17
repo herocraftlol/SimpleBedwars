@@ -1,10 +1,23 @@
 # Configuration du plugin BedwarsPlugin
 
 game:
-  countdown-lobby-seconds: 20
+  countdown-lobby-seconds: 10
   game-duration-minutes: 45
   sudden-death-dragon-height-above-bed: 20
   end-reset-delay-seconds: 10
+  delete-confirmation-seconds: 15
+
+lobby:
+  # Rayon (en blocs) de la cage invisible construite au-dessus de la map,
+  # centrée sur l'emplacement défini par /bd <nom> spec.
+  cage-radius: 5
+  cage-height: 4
+
+npc:
+  # Skin par défaut utilisé pour les PNJ marchand/amélioration si aucun pseudo n'est précisé
+  # lors de /bd <nom> shop <shop|upgrade> color <couleur> [pseudo]. Laisser vide = tête neutre
+  # (aucun appel réseau), ou mettre un vrai pseudo Minecraft pour un skin réel par défaut.
+  default-skin: ""
 
 generators:
   iron-interval-ticks: 20

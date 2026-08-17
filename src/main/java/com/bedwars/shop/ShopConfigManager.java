@@ -1,144 +1,165 @@
 package com.bedwars.shop;
 
 import com.bedwars.BedwarsPlugin;
-import com.bedwars.arena.GeneratorType;
 import org.bukkit.Material;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Objects;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
+/**
+ * Charge/sauvegarde le contenu du shop (catégories + articles), entièrement configurable
+ * en jeu via : /bd shop <catégorie> <slot> <item> <quantité> <prix> <minerai>
+ *
+ * Remplace l'ancien système figé en dur dans le code (ShopCategory) : plus besoin de
+ * recompiler pour ajouter/modifier un article, tout est stocké dans shop.yml.
+ *
+ * Le nom de catégorie "tools" est réservé à l'onglet spécial pioche/hache à paliers
+ * (voir {@link ToolTier}) et ne peut pas être utilisé ici.
+ */
 public class ShopConfigManager {
+
+    public static final String RESERVED_TOOLS_CATEGORY = "tools";
 
     private final BedwarsPlugin plugin;
     private final File file;
-    private ShopConfig config = new ShopConfig();
+
+    /** Ordre d'affichage des onglets (catégories), tel que découvert/ajouté par les admins. */
+    private final List<String> categoryOrder = new java.util.ArrayList<>();
+    /** catégorie -> (slot -> article). */
+    private final Map<String, TreeMap<Integer, ShopItem>> items = new LinkedHashMap<>();
 
     public ShopConfigManager(BedwarsPlugin plugin) {
         this.plugin = plugin;
-        this.file = new File(plugin.getDataFolder(), "shop_config.yml");
-    }
-
-    public ShopConfig getConfig() {
-        return config;
+        this.file = new File(plugin.getDataFolder(), "shop.yml");
     }
 
     public void load() {
-        if (!file.exists()) return;
-        YamlConfiguration yml = YamlConfiguration.loadConfiguration(file);
-        ShopConfig loaded = new ShopConfig();
+        categoryOrder.clear();
+        items.clear();
 
-        if (yml.isConfigurationSection("shopGuis")) {
-            for (String guiName : Objects.requireNonNull(yml.getConfigurationSection("shopGuis")).getKeys(false)) {
-                GuiDefinition gui = loaded.getOrCreateShopGui(guiName);
-                ConfigurationSection slotsSection = yml.getConfigurationSection("shopGuis." + guiName);
-                if (slotsSection == null) continue;
-                for (String slotKey : slotsSection.getKeys(false)) {
-                    int index;
+        if (!file.exists()) {
+            seedDefaults();
+            save();
+            return;
+        }
+
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
+        categoryOrder.addAll(config.getStringList("categories"));
+
+        ConfigurationSection itemsSection = config.getConfigurationSection("items");
+        if (itemsSection != null) {
+            for (String category : itemsSection.getKeys(false)) {
+                ConfigurationSection catSection = itemsSection.getConfigurationSection(category);
+                if (catSection == null) continue;
+                TreeMap<Integer, ShopItem> slots = new TreeMap<>();
+                for (String slotKey : catSection.getKeys(false)) {
+                    ConfigurationSection itemSection = catSection.getConfigurationSection(slotKey);
+                    if (itemSection == null) continue;
                     try {
-                        index = Integer.parseInt(slotKey);
-                    } catch (NumberFormatException e) {
-                        continue;
-                    }
-                    String base = "shopGuis." + guiName + "." + slotKey;
-                    String kind = yml.getString(base + ".kind");
-                    if ("SHOP_ITEM".equals(kind)) {
-                        Material mat = Material.matchMaterial(Objects.requireNonNull(yml.getString(base + ".material")));
-                        int price = yml.getInt(base + ".price");
-                        GeneratorType currency = GeneratorType.valueOf(yml.getString(base + ".currency"));
-                        gui.setSlot(index, GuiSlot.shopItem(mat, price, currency));
-                    } else if ("SHOP_LINK".equals(kind)) {
-                        Material mat = Material.matchMaterial(Objects.requireNonNull(yml.getString(base + ".material")));
-                        String linked = yml.getString(base + ".linkedGui");
-                        gui.setSlot(index, GuiSlot.shopLink(mat, linked));
+                        int slot = Integer.parseInt(slotKey);
+                        Material material = Material.valueOf(itemSection.getString("material"));
+                        Material currency = Material.valueOf(itemSection.getString("currency"));
+                        int amount = itemSection.getInt("amount", 1);
+                        int price = itemSection.getInt("price", 1);
+                        slots.put(slot, new ShopItem(material, amount, currency, price));
+                    } catch (Exception e) {
+                        plugin.getLogger().warning("Article de shop invalide (" + category + "." + slotKey + "): " + e.getMessage());
                     }
                 }
+                if (!slots.isEmpty()) items.put(category, slots);
+                if (!categoryOrder.contains(category)) categoryOrder.add(category);
             }
         }
-
-        if (yml.isConfigurationSection("upgradeGui")) {
-            ConfigurationSection slotsSection = yml.getConfigurationSection("upgradeGui");
-            for (String slotKey : Objects.requireNonNull(slotsSection).getKeys(false)) {
-                int index;
-                try {
-                    index = Integer.parseInt(slotKey);
-                } catch (NumberFormatException e) {
-                    continue;
-                }
-                String base = "upgradeGui." + slotKey;
-                Material mat = Material.matchMaterial(Objects.requireNonNull(yml.getString(base + ".material")));
-                UpgradeType type = UpgradeType.valueOf(Objects.requireNonNull(yml.getString(base + ".type")));
-                int startLevel = yml.getInt(base + ".startLevel", 1);
-                loaded.getUpgradeGui().setSlot(index, GuiSlot.upgradeItem(mat, type, startLevel));
-            }
-        }
-
-        if (yml.isConfigurationSection("upgradeTypeConfigs")) {
-            for (String typeName : Objects.requireNonNull(yml.getConfigurationSection("upgradeTypeConfigs")).getKeys(false)) {
-                UpgradeType type;
-                try {
-                    type = UpgradeType.valueOf(typeName);
-                } catch (IllegalArgumentException e) {
-                    continue;
-                }
-                UpgradeTypeConfig cfg = loaded.getUpgradeConfig(type);
-                cfg.setMaxLevel(yml.getInt("upgradeTypeConfigs." + typeName + ".maxLevel", type.getDefaultMaxLevel()));
-                ConfigurationSection prices = yml.getConfigurationSection("upgradeTypeConfigs." + typeName + ".prices");
-                if (prices != null) {
-                    for (String lvl : prices.getKeys(false)) {
-                        try {
-                            cfg.setPriceForLevel(Integer.parseInt(lvl), prices.getInt(lvl));
-                        } catch (NumberFormatException ignored) {}
-                    }
-                }
-            }
-        }
-
-        this.config = loaded;
     }
 
     public void save() {
-        YamlConfiguration yml = new YamlConfiguration();
-
-        for (GuiDefinition gui : config.getShopGuis().values()) {
-            for (var entry : gui.getSlots().entrySet()) {
-                GuiSlot slot = entry.getValue();
-                String base = "shopGuis." + gui.getName() + "." + entry.getKey();
-                yml.set(base + ".kind", slot.getKind().name());
-                if (slot.getMaterial() != null) yml.set(base + ".material", slot.getMaterial().name());
-                if (slot.getKind() == GuiSlot.Kind.SHOP_ITEM) {
-                    yml.set(base + ".price", slot.getPrice());
-                    yml.set(base + ".currency", slot.getCurrency().name());
-                } else if (slot.getKind() == GuiSlot.Kind.SHOP_LINK) {
-                    yml.set(base + ".linkedGui", slot.getLinkedGui());
-                }
-            }
-            // s'assure que même un gui vide existe dans le fichier
-            yml.createSection("shopGuis." + gui.getName());
-        }
-
-        for (var entry : config.getUpgradeGui().getSlots().entrySet()) {
-            GuiSlot slot = entry.getValue();
-            String base = "upgradeGui." + entry.getKey();
-            yml.set(base + ".material", slot.getMaterial().name());
-            yml.set(base + ".type", slot.getUpgradeType().name());
-            yml.set(base + ".startLevel", slot.getStartLevel());
-        }
-
-        for (UpgradeTypeConfig cfg : config.getUpgradeTypeConfigs().values()) {
-            String base = "upgradeTypeConfigs." + cfg.getType().name();
-            yml.set(base + ".maxLevel", cfg.getMaxLevel());
-            for (var priceEntry : cfg.getLevelPrices().entrySet()) {
-                yml.set(base + ".prices." + priceEntry.getKey(), priceEntry.getValue());
+        YamlConfiguration config = new YamlConfiguration();
+        config.set("categories", categoryOrder);
+        for (Map.Entry<String, TreeMap<Integer, ShopItem>> catEntry : items.entrySet()) {
+            String base = "items." + catEntry.getKey();
+            for (Map.Entry<Integer, ShopItem> slotEntry : catEntry.getValue().entrySet()) {
+                String slotBase = base + "." + slotEntry.getKey();
+                ShopItem item = slotEntry.getValue();
+                config.set(slotBase + ".material", item.getMaterial().name());
+                config.set(slotBase + ".amount", item.getAmount());
+                config.set(slotBase + ".price", item.getPrice());
+                config.set(slotBase + ".currency", item.getCurrency().name());
             }
         }
-
         try {
-            yml.save(file);
+            config.save(file);
         } catch (IOException e) {
-            plugin.getLogger().warning("Impossible de sauvegarder shop_config.yml: " + e.getMessage());
+            plugin.getLogger().warning("Impossible de sauvegarder shop.yml : " + e.getMessage());
         }
+    }
+
+    /** Ajoute/remplace un article à un slot précis d'une catégorie (créée si besoin). */
+    public void setItem(String category, int slot, ShopItem item) {
+        String key = category.toLowerCase();
+        if (!categoryOrder.contains(key)) categoryOrder.add(key);
+        items.computeIfAbsent(key, k -> new TreeMap<>()).put(slot, item);
+        save();
+    }
+
+    public List<String> getCategories() {
+        return categoryOrder;
+    }
+
+    public Map<Integer, ShopItem> getItems(String category) {
+        return items.getOrDefault(category.toLowerCase(), new TreeMap<>());
+    }
+
+    public boolean categoryExists(String category) {
+        return categoryOrder.contains(category.toLowerCase());
+    }
+
+    /** Remplit un jeu d'articles de départ raisonnable au tout premier démarrage (aucun shop.yml présent). */
+    private void seedDefaults() {
+        int slot;
+
+        slot = 9;
+        setItemSilent("blocks", slot++, new ShopItem(Material.WHITE_WOOL, 16, Material.IRON_INGOT, 4));
+        setItemSilent("blocks", slot++, new ShopItem(Material.WHITE_TERRACOTTA, 16, Material.IRON_INGOT, 12));
+        setItemSilent("blocks", slot++, new ShopItem(Material.GLASS, 16, Material.IRON_INGOT, 12));
+        setItemSilent("blocks", slot++, new ShopItem(Material.END_STONE, 12, Material.IRON_INGOT, 24));
+        setItemSilent("blocks", slot++, new ShopItem(Material.LADDER, 8, Material.IRON_INGOT, 4));
+        setItemSilent("blocks", slot++, new ShopItem(Material.OAK_PLANKS, 16, Material.IRON_INGOT, 8));
+        setItemSilent("blocks", slot, new ShopItem(Material.OBSIDIAN, 4, Material.EMERALD, 4));
+
+        slot = 9;
+        setItemSilent("melee", slot++, new ShopItem(Material.STONE_SWORD, 1, Material.IRON_INGOT, 10));
+        setItemSilent("melee", slot++, new ShopItem(Material.IRON_SWORD, 1, Material.GOLD_INGOT, 7));
+        setItemSilent("melee", slot, new ShopItem(Material.DIAMOND_SWORD, 1, Material.EMERALD, 4));
+
+        slot = 9;
+        setItemSilent("armor", slot++, new ShopItem(Material.CHAINMAIL_BOOTS, 1, Material.IRON_INGOT, 40));
+        setItemSilent("armor", slot++, new ShopItem(Material.IRON_BOOTS, 1, Material.GOLD_INGOT, 12));
+        setItemSilent("armor", slot, new ShopItem(Material.DIAMOND_BOOTS, 1, Material.EMERALD, 8));
+
+        slot = 9;
+        setItemSilent("ranged", slot++, new ShopItem(Material.ARROW, 6, Material.GOLD_INGOT, 2));
+        setItemSilent("ranged", slot, new ShopItem(Material.BOW, 1, Material.GOLD_INGOT, 12));
+
+        slot = 9;
+        setItemSilent("potions", slot++, new ShopItem(Material.POTION, 1, Material.EMERALD, 1));
+        setItemSilent("potions", slot, new ShopItem(Material.POTION, 1, Material.EMERALD, 2));
+
+        slot = 9;
+        setItemSilent("utility", slot++, new ShopItem(Material.GOLDEN_APPLE, 1, Material.GOLD_INGOT, 3));
+        setItemSilent("utility", slot++, new ShopItem(Material.ENDER_PEARL, 1, Material.EMERALD, 4));
+        setItemSilent("utility", slot++, new ShopItem(Material.WATER_BUCKET, 1, Material.GOLD_INGOT, 2));
+        setItemSilent("utility", slot, new ShopItem(Material.TNT, 1, Material.GOLD_INGOT, 4));
+    }
+
+    private void setItemSilent(String category, int slot, ShopItem item) {
+        String key = category.toLowerCase();
+        if (!categoryOrder.contains(key)) categoryOrder.add(key);
+        items.computeIfAbsent(key, k -> new TreeMap<>()).put(slot, item);
     }
 }

@@ -35,12 +35,11 @@ public class PlayerProtectionListener implements Listener {
         GameInstance game = plugin.getGameManager().findInstanceOf(player);
         if (game == null) return;
         Arena arena = game.getArena();
-        if (arena.getLobbyPos1() == null || arena.getLobbyPos2() == null || arena.getSpecLocation() == null) return;
+        if (arena.getSpecLocation() == null) return;
 
         Location to = event.getTo();
         if (to == null) return;
-        if (!isWithin(to, arena.getLobbyPos1(), arena.getLobbyPos2())
-                && !isNear(to, arena.getSpecLocation(), 60)) {
+        if (!plugin.getWaitingLobbyManager().isWithin(arena, to) && !isNear(to, arena.getSpecLocation(), 60)) {
             // Le spectateur essaie de sortir trop loin de la zone prévue : on le replace.
             event.setTo(arena.getSpecLocation());
         }
@@ -49,19 +48,6 @@ public class PlayerProtectionListener implements Listener {
     private boolean isNear(Location loc, Location center, double radius) {
         if (!loc.getWorld().equals(center.getWorld())) return false;
         return loc.distanceSquared(center) <= radius * radius;
-    }
-
-    private boolean isWithin(Location loc, Location pos1, Location pos2) {
-        if (!loc.getWorld().equals(pos1.getWorld())) return false;
-        double minX = Math.min(pos1.getX(), pos2.getX());
-        double maxX = Math.max(pos1.getX(), pos2.getX());
-        double minY = Math.min(pos1.getY(), pos2.getY());
-        double maxY = Math.max(pos1.getY(), pos2.getY());
-        double minZ = Math.min(pos1.getZ(), pos2.getZ());
-        double maxZ = Math.max(pos1.getZ(), pos2.getZ());
-        return loc.getX() >= minX && loc.getX() <= maxX
-                && loc.getY() >= minY && loc.getY() <= maxY
-                && loc.getZ() >= minZ && loc.getZ() <= maxZ;
     }
 
     @EventHandler

@@ -32,6 +32,11 @@ public class GameManager {
         instances.put(arena.getName().toLowerCase(), new GameInstance(plugin, arena));
     }
 
+    /** Retire définitivement l'instance de partie d'une arène (utilisé par /bd delete). */
+    public void removeInstance(Arena arena) {
+        instances.remove(arena.getName().toLowerCase());
+    }
+
     public boolean joinArena(Player player, Arena arena) {
         if (!arena.isSaved()) return false;
         GameInstance instance = getInstance(arena);

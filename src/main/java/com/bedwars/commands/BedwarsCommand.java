@@ -20,11 +20,13 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
     private static final String PREFIX = ChatColor.GOLD + "[Bedwars] " + ChatColor.RESET;
 
     private final BedwarsPlugin plugin;
-    private final ShopCommandHandler shopCommandHandler;
+    /** Suppressions en attente de confirmation (/bd delete <nom> puis /bd delete <nom> confirm). */
+    private final java.util.Map<java.util.UUID, PendingDelete> pendingDeletes = new java.util.HashMap<>();
+
+    private record PendingDelete(String arenaName, long expiresAt) {}
 
     public BedwarsCommand(BedwarsPlugin plugin) {
         this.plugin = plugin;
-        this.shopCommandHandler = new ShopCommandHandler(plugin);
     }
 
     @Override
@@ -41,13 +43,13 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
             return handleCreate(sender, args);
         }
         if (sub.equals("delete")) {
-            return handleDeleteArena(sender, args);
-        }
-        if (sub.equals("gui")) {
-            return handleGui(sender);
+            return handleDelete(sender, args);
         }
         if (sub.equals("shop")) {
-            return handleShopRoot(sender, args);
+            return handleShopConfig(sender, args);
+        }
+        if (sub.equals("admin")) {
+            return handleAdmin(sender, args);
         }
         if (sub.equals("join")) {
             return handleJoin(sender, args);
@@ -100,16 +102,14 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
                     player.sendMessage(PREFIX + ChatColor.GREEN + "Zone de jeu confirmée pour " + arena.getName() + ".");
                 }
             }
-            case "delete" -> handleDeleteAtLocation(player, arena);
             case "bed" -> handleBed(player, arena, args);
             case "spawn" -> handleSpawn(player, arena, args);
             case "item" -> handleItem(player, arena, args);
             case "shop" -> handleShop(player, arena, args);
             case "spec" -> {
                 arena.setSpecLocation(player.getLocation());
-                player.sendMessage(PREFIX + "Spawn des spectateurs défini pour " + arena.getName() + ".");
+                player.sendMessage(PREFIX + "Centre du lobby d'attente / spawn spectateurs défini pour " + arena.getName() + ".");
             }
-            case "lobby" -> handleLobby(player, arena, args);
             case "save" -> handleSave(player, arena);
             case "config" -> {
                 arena.setSaved(false);
@@ -147,7 +147,12 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private boolean handleDeleteArena(CommandSender sender, String[] args) {
+    /**
+     * /bd delete <nom> : supprime intégralement une arène (config, région sauvegardée, NPC,
+     * partie en cours). Demande une confirmation explicite avant d'agir : /bd delete <nom> confirm
+     * dans les <delete-confirmation-seconds> secondes.
+     */
+    private boolean handleDelete(CommandSender sender, String[] args) {
         if (!sender.hasPermission("bedwars.admin")) {
             sender.sendMessage(PREFIX + ChatColor.RED + "Vous n'avez pas la permission.");
             return true;
@@ -156,58 +161,150 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd delete <nom>");
             return true;
         }
-        String name = args[1];
-        if (plugin.getArenaManager().getArena(name) == null) {
-            sender.sendMessage(PREFIX + ChatColor.RED + "Arène inconnue: " + name);
+        Arena arena = plugin.getArenaManager().getArena(args[1]);
+        if (arena == null) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Arène inconnue: " + args[1]);
             return true;
         }
-        GameInstance running = plugin.getGameManager().getExistingInstance(plugin.getArenaManager().getArena(name));
-        if (running != null) {
-            for (Player p : running.getAllParticipants()) {
-                p.sendMessage(PREFIX + ChatColor.RED + "L'arène a été supprimée par un administrateur.");
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Cette action doit être exécutée en jeu.");
+            return true;
+        }
+
+        boolean confirming = args.length >= 3 && args[2].equalsIgnoreCase("confirm");
+        int delaySeconds = plugin.getConfig().getInt("game.delete-confirmation-seconds", 15);
+
+        if (!confirming) {
+            pendingDeletes.put(player.getUniqueId(),
+                    new PendingDelete(arena.getName(), System.currentTimeMillis() + delaySeconds * 1000L));
+            player.sendMessage(PREFIX + ChatColor.RED + "" + ChatColor.BOLD + "Attention: "
+                    + ChatColor.RED + "cette action va supprimer DÉFINITIVEMENT la map " + ChatColor.YELLOW + arena.getName()
+                    + ChatColor.RED + " (configuration, région sauvegardée, PNJ).");
+            player.sendMessage(PREFIX + ChatColor.RED + "Tapez " + ChatColor.YELLOW + "/bd delete " + arena.getName() + " confirm"
+                    + ChatColor.RED + " dans les " + delaySeconds + " secondes pour confirmer.");
+            return true;
+        }
+
+        PendingDelete pending = pendingDeletes.remove(player.getUniqueId());
+        if (pending == null || !pending.arenaName().equalsIgnoreCase(arena.getName())
+                || System.currentTimeMillis() > pending.expiresAt()) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Aucune suppression en attente pour cette map (ou délai expiré). "
+                    + "Retapez /bd delete " + arena.getName() + " pour recommencer.");
+            return true;
+        }
+
+        deleteArena(arena);
+        player.sendMessage(PREFIX + ChatColor.GREEN + "Map " + ChatColor.YELLOW + arena.getName()
+                + ChatColor.GREEN + " supprimée définitivement.");
+        return true;
+    }
+
+    /**
+     * /bd shop <catégorie> <slot> <item> <quantité> <prix> <minerai>
+     * Configure (ajoute ou remplace) un article du shop, sans avoir à toucher au code.
+     * Le nom de catégorie "tools" est réservé à l'onglet spécial pioche/hache à paliers.
+     */
+    private boolean handleShopConfig(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("bedwars.admin")) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Vous n'avez pas la permission.");
+            return true;
+        }
+        if (args.length < 7) {
+            sender.sendMessage(PREFIX + ChatColor.RED
+                    + "Utilisation: /bd shop <catégorie> <slot> <item> <quantité> <prix> <minerai>");
+            sender.sendMessage(ChatColor.GRAY + "Exemple: /bd shop blocks 9 WHITE_WOOL 16 4 fer");
+            return true;
+        }
+
+        String category = args[1].toLowerCase();
+        if (category.equals(com.bedwars.shop.ShopConfigManager.RESERVED_TOOLS_CATEGORY)) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "\"tools\" est une catégorie réservée (pioche/hache à paliers), non configurable.");
+            return true;
+        }
+
+        int slot;
+        try {
+            slot = Integer.parseInt(args[2]);
+        } catch (NumberFormatException e) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Le slot doit être un nombre (9 à 44).");
+            return true;
+        }
+        if (slot < 9 || slot > 44) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Le slot doit être compris entre 9 et 44.");
+            return true;
+        }
+
+        org.bukkit.Material material;
+        try {
+            material = org.bukkit.Material.valueOf(args[3].toUpperCase());
+        } catch (IllegalArgumentException e) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Item inconnu: " + args[3] + " (nom de Material Bukkit attendu, ex: WHITE_WOOL).");
+            return true;
+        }
+
+        int amount;
+        int price;
+        try {
+            amount = Integer.parseInt(args[4]);
+            price = Integer.parseInt(args[5]);
+        } catch (NumberFormatException e) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "La quantité et le prix doivent être des nombres entiers.");
+            return true;
+        }
+        if (amount < 1 || price < 1) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "La quantité et le prix doivent être supérieurs à 0.");
+            return true;
+        }
+
+        GeneratorType currencyType = GeneratorType.fromInput(args[6]);
+        if (currencyType == null) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Minerai inconnu: " + args[6] + ". Utilisez: fer, or, diamand, emeraude.");
+            return true;
+        }
+
+        plugin.getShopConfigManager().setItem(category, slot,
+                new com.bedwars.shop.ShopItem(material, amount, currencyType.getMaterial(), price));
+
+        sender.sendMessage(PREFIX + ChatColor.GREEN + "Article configuré: " + ChatColor.WHITE + amount + "x " + material.name()
+                + ChatColor.GREEN + " au slot " + slot + " de la catégorie " + ChatColor.YELLOW + category
+                + ChatColor.GREEN + " (" + price + " " + args[6] + ").");
+        return true;
+    }
+
+    private void deleteArena(Arena arena) {
+        // Renvoie tout le monde (joueurs en attente, en jeu, spectateurs) avant de tout nettoyer.
+        var instance = plugin.getGameManager().getExistingInstance(arena);
+        if (instance != null) {
+            for (Player p : instance.getAllParticipants()) {
+                p.sendMessage(PREFIX + ChatColor.RED + "La map " + arena.getName() + " a été supprimée, vous êtes replacé au spawn.");
+                p.setGameMode(org.bukkit.GameMode.SURVIVAL);
+                if (p.getWorld().getSpawnLocation() != null) {
+                    p.teleport(p.getWorld().getSpawnLocation());
+                }
             }
         }
-        plugin.getArenaManager().deleteArena(name);
-        sender.sendMessage(PREFIX + ChatColor.GREEN + "Arène " + name + " supprimée entièrement.");
-        return true;
+        plugin.getGameManager().removeInstance(arena);
+        plugin.getWaitingLobbyManager().destroy(arena);
+        plugin.getShopNpcManager().removeForArena(arena);
+        plugin.getArenaManager().deleteArena(arena);
     }
 
-    private boolean handleGui(CommandSender sender) {
+    private boolean handleAdmin(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("bedwars.admin")) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Vous n'avez pas la permission.");
+            return true;
+        }
         if (!(sender instanceof Player player)) {
             sender.sendMessage(PREFIX + ChatColor.RED + "Cette action doit être exécutée en jeu.");
             return true;
         }
-        plugin.getJoinGUIManager().open(player);
-        return true;
-    }
-
-    private boolean handleShopRoot(CommandSender sender, String[] args) {
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage(PREFIX + ChatColor.RED + "Cette action doit être exécutée en jeu.");
+        if (args.length < 2 || !args[1].equalsIgnoreCase("gui")) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd admin gui");
             return true;
         }
-        boolean editing = args.length >= 3 && !args[2].equalsIgnoreCase("display");
-        if (editing && !player.hasPermission("bedwars.admin")) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Vous n'avez pas la permission de configurer le shop.");
-            return true;
-        }
-        shopCommandHandler.handle(player, args);
+        plugin.getAdminNPCManager().spawnAt(player.getLocation());
+        player.sendMessage(PREFIX + ChatColor.GREEN + "NPC d'administration placé ici. Clique dessus pour ouvrir le menu.");
         return true;
-    }
-
-    private void handleDeleteAtLocation(Player player, Arena arena) {
-        if (arena.isSaved()) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Passez d'abord l'arène en mode configuration: /bd "
-                    + arena.getName() + " config");
-            return;
-        }
-        String removed = plugin.getArenaManager().deleteAtLocation(arena, player.getLocation());
-        if (removed == null) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Aucun élément de configuration de " + arena.getName()
-                    + " ne se trouve exactement à votre emplacement.");
-        } else {
-            player.sendMessage(PREFIX + ChatColor.GREEN + "Supprimé: " + removed + ".");
-        }
     }
 
     private boolean handleJoin(CommandSender sender, String[] args) {
@@ -343,7 +440,8 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
 
     private void handleShop(Player player, Arena arena, String[] args) {
         if (args.length < 5 || !args[3].equalsIgnoreCase("color")) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd " + arena.getName() + " shop <shop|upgrade> color <couleur>");
+            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd " + arena.getName()
+                    + " shop <shop|upgrade> color <couleur> [pseudo pour le skin]");
             return;
         }
         boolean isUpgrade = args[2].equalsIgnoreCase("upgrade");
@@ -356,45 +454,18 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         if (color == null) return;
         ArenaTeam team = arena.getOrCreateTeam(color);
         Location loc = player.getLocation();
+        String skinName = args.length >= 6 ? args[5] : null;
 
+        var type = isShop ? com.bedwars.npc.ShopNpcManager.NpcType.SHOP : com.bedwars.npc.ShopNpcManager.NpcType.UPGRADE;
         if (isShop) {
             team.setShopLocation(loc);
         } else {
             team.setUpgradeLocation(loc);
         }
+        plugin.getShopNpcManager().spawnOne(arena, color, type, loc, skinName);
 
-        plugin.getHumanNPCManager().spawn(isShop ? com.bedwars.shop.ShopType.SHOP : com.bedwars.shop.ShopType.UPGRADE, loc);
-
-        player.sendMessage(PREFIX + ChatColor.GREEN + (isShop ? "Marchand" : "Villageois d'amélioration")
+        player.sendMessage(PREFIX + ChatColor.GREEN + (isShop ? "Marchand" : "PNJ d'amélioration")
                 + " placé pour l'équipe " + color.getColoredName() + ChatColor.GREEN + ".");
-    }
-
-    private void handleLobby(Player player, Arena arena, String[] args) {
-        if (args.length < 3) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd " + arena.getName() + " lobby <pos1|pos2|posconfirm>");
-            return;
-        }
-        switch (args[2].toLowerCase()) {
-            case "pos1" -> {
-                arena.setLobbyPos1(player.getLocation());
-                arena.setLobbyZoneConfirmed(false);
-                player.sendMessage(PREFIX + "Position 1 de la zone d'attente définie.");
-            }
-            case "pos2" -> {
-                arena.setLobbyPos2(player.getLocation());
-                arena.setLobbyZoneConfirmed(false);
-                player.sendMessage(PREFIX + "Position 2 de la zone d'attente définie.");
-            }
-            case "posconfirm" -> {
-                if (arena.getLobbyPos1() == null || arena.getLobbyPos2() == null) {
-                    player.sendMessage(PREFIX + ChatColor.RED + "Il faut définir lobby pos1 et pos2 avant de confirmer.");
-                } else {
-                    arena.setLobbyZoneConfirmed(true);
-                    player.sendMessage(PREFIX + ChatColor.GREEN + "Zone d'attente confirmée.");
-                }
-            }
-            default -> player.sendMessage(PREFIX + ChatColor.RED + "Sous-action inconnue pour lobby.");
-        }
     }
 
     private void handleSave(Player player, Arena arena) {
@@ -410,6 +481,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         plugin.getArenaManager().captureRegion(arena);
         arena.setSaved(true);
         arena.setState(ArenaState.WAITING);
+        plugin.getShopNpcManager().spawnForArena(arena);
         player.sendMessage(PREFIX + ChatColor.GREEN + "Arène " + arena.getName() + " sauvegardée et jouable !");
     }
 
@@ -433,50 +505,51 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
     private void sendHelp(CommandSender sender) {
         sender.sendMessage(PREFIX + ChatColor.YELLOW + "Commandes disponibles:");
         sender.sendMessage(ChatColor.GRAY + "/bd create <nom>  |  /bd delete <nom>");
-        sender.sendMessage(ChatColor.GRAY + "/bd gui  (menu des parties disponibles)");
+        sender.sendMessage(ChatColor.GRAY + "/bd shop <catégorie> <slot> <item> <quantité> <prix> <minerai>");
+        sender.sendMessage(ChatColor.GRAY + "/bd admin gui");
         sender.sendMessage(ChatColor.GRAY + "/bd join <nom>  |  /bd leave  |  /bd list");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> equipe <2/4/6/8> <joueurs>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> pos1 | pos2 | posconfirm");
-        sender.sendMessage(ChatColor.GRAY + "/bd <nom> bed <couleur>  |  spawn <couleur>");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> bed <couleur>");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> spawn <couleur>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> item <fer|or|diamand|emeraude>");
-        sender.sendMessage(ChatColor.GRAY + "/bd <nom> shop <shop|upgrade> color <couleur>");
-        sender.sendMessage(ChatColor.GRAY + "/bd <nom> spec  |  /bd <nom> delete (supprime ce qui est à vos pieds)");
-        sender.sendMessage(ChatColor.GRAY + "/bd <nom> lobby pos1 | pos2 | posconfirm");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> shop <shop|upgrade> color <couleur> [pseudo]");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> spec " + ChatColor.DARK_GRAY + "(= centre du lobby d'attente flottant)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> save  |  /bd <nom> config");
-        sender.sendMessage(ChatColor.GRAY + "/bd shop <shop|upgrade> display|custom|addgui|delete|item ...");
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> options = new ArrayList<>();
         if (args.length == 1) {
-            options.addAll(List.of("create", "delete", "gui", "shop", "join", "leave", "list"));
+            options.addAll(List.of("create", "delete", "shop", "admin", "join", "leave", "list"));
             options.addAll(plugin.getArenaManager().getArenas().keySet());
         } else if (args.length == 2) {
-            if (args[0].equalsIgnoreCase("delete") || args[0].equalsIgnoreCase("join")) {
+            if (args[0].equalsIgnoreCase("admin")) {
+                options.add("gui");
+            } else if (args[0].equalsIgnoreCase("join") || args[0].equalsIgnoreCase("delete")) {
                 options.addAll(plugin.getArenaManager().getArenas().keySet());
             } else if (args[0].equalsIgnoreCase("shop")) {
-                options.addAll(List.of("shop", "upgrade"));
+                options.addAll(plugin.getShopConfigManager().getCategories());
+                options.addAll(List.of("blocks", "melee", "armor", "ranged", "potions", "utility"));
             } else if (plugin.getArenaManager().getArena(args[0]) != null) {
                 options.addAll(List.of("equipe", "pos1", "pos2", "posconfirm", "bed", "spawn",
-                        "item", "shop", "spec", "lobby", "save", "config", "delete"));
+                        "item", "shop", "spec", "save", "config"));
             }
+        } else if (args.length == 7 && args[0].equalsIgnoreCase("shop")) {
+            options.addAll(List.of("fer", "or", "diamand", "emeraude"));
         } else if (args.length == 3) {
-            if (args[0].equalsIgnoreCase("shop")) {
-                options.addAll(List.of("display", "custom", "addgui", "delete", "item"));
-            } else {
-                Arena arena = plugin.getArenaManager().getArena(args[0]);
-                if (arena != null) {
-                    switch (args[1].toLowerCase()) {
-                        case "bed", "spawn" -> options.addAll(colorNames());
-                        case "item" -> options.addAll(List.of("fer", "or", "diamand", "emeraude"));
-                        case "shop" -> options.addAll(List.of("shop", "upgrade"));
-                        case "lobby" -> options.addAll(List.of("pos1", "pos2", "posconfirm"));
-                    }
+            if (args[0].equalsIgnoreCase("delete")) {
+                options.add("confirm");
+            }
+            Arena arena = plugin.getArenaManager().getArena(args[0]);
+            if (arena != null) {
+                switch (args[1].toLowerCase()) {
+                    case "bed", "spawn" -> options.addAll(colorNames());
+                    case "item" -> options.addAll(List.of("fer", "or", "diamand", "emeraude"));
+                    case "shop" -> options.addAll(List.of("shop", "upgrade"));
                 }
             }
-        } else if (args.length == 4 && args[0].equalsIgnoreCase("shop") && args[2].equalsIgnoreCase("item")) {
-            options.addAll(List.of("Heal", "Sharp", "Armur", "maniac", "chute", "Forge", "TrapA", "TrapC", "TrapM", "Dragon"));
         } else if (args.length == 4 && args[1].equalsIgnoreCase("shop")) {
             options.add("color");
         } else if (args.length == 5 && args[1].equalsIgnoreCase("shop")) {
