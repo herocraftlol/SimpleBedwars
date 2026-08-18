@@ -51,8 +51,8 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         if (sub.equals("shop")) {
             return handleShopConfig(sender, args);
         }
-        if (sub.equals("admin")) {
-            return handleAdmin(sender, args);
+        if (sub.equals("arene")) {
+            return handleArene(sender, args);
         }
         if (sub.equals("join")) {
             return handleJoin(sender, args);
@@ -340,21 +340,17 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         plugin.getArenaManager().deleteArena(arena);
     }
 
-    private boolean handleAdmin(CommandSender sender, String[] args) {
-        if (!sender.hasPermission("bedwars.admin")) {
-            sender.sendMessage(PREFIX + ChatColor.RED + "Vous n'avez pas la permission.");
-            return true;
-        }
+    /** /bd arene gui : ouvre directement le GUI de sélection des arènes pour celui qui tape la commande. */
+    private boolean handleArene(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(PREFIX + ChatColor.RED + "Cette action doit être exécutée en jeu.");
             return true;
         }
         if (args.length < 2 || !args[1].equalsIgnoreCase("gui")) {
-            sender.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd admin gui");
+            sender.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd arene gui");
             return true;
         }
-        plugin.getAdminNPCManager().spawnAt(player.getLocation());
-        player.sendMessage(PREFIX + ChatColor.GREEN + "NPC d'administration placé ici. Clique dessus pour ouvrir le menu.");
+        plugin.getAdminGUIManager().open(player);
         return true;
     }
 
@@ -558,7 +554,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "/bd create <nom>  |  /bd delete <nom>");
         sender.sendMessage(ChatColor.GRAY + "/bd copy <source> <nouveau nom>" + ChatColor.DARK_GRAY + " (clone une arène, translatée à votre position)");
         sender.sendMessage(ChatColor.GRAY + "/bd shop <catégorie> <slot> <item> <quantité> <prix> <minerai>");
-        sender.sendMessage(ChatColor.GRAY + "/bd admin gui");
+        sender.sendMessage(ChatColor.GRAY + "/bd arene gui" + ChatColor.DARK_GRAY + " (affiche directement le GUI des arènes)");
         sender.sendMessage(ChatColor.GRAY + "/bd join <nom>  |  /bd leave  |  /bd list");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> equipe <2/4/6/8> <joueurs>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> pos1 | pos2 | posconfirm");
@@ -574,10 +570,10 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> options = new ArrayList<>();
         if (args.length == 1) {
-            options.addAll(List.of("create", "delete", "copy", "shop", "admin", "join", "leave", "list"));
+            options.addAll(List.of("create", "delete", "copy", "shop", "arene", "join", "leave", "list"));
             options.addAll(plugin.getArenaManager().getArenas().keySet());
         } else if (args.length == 2) {
-            if (args[0].equalsIgnoreCase("admin")) {
+            if (args[0].equalsIgnoreCase("arene")) {
                 options.add("gui");
             } else if (args[0].equalsIgnoreCase("join") || args[0].equalsIgnoreCase("delete")
                     || args[0].equalsIgnoreCase("copy")) {

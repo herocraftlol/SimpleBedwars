@@ -4,7 +4,7 @@
 > Crée tes arènes, configure le shop et les améliorations directement depuis le serveur,
 > puis lance des parties façon Hypixel — le tout pour **Paper 1.21+** (Java 21).
 
-![Version](https://img.shields.io/badge/version-1.0.6-blue)
+![Version](https://img.shields.io/badge/version-1.0.7-blue)
 ![Paper](https://img.shields.io/badge/Paper-1.21%2B-orange)
 ![Java](https://img.shields.io/badge/Java-21-red)
 ![License](https://img.shields.io/badge/build-Maven-success)
@@ -97,6 +97,7 @@ Affichage en temps réel du score, de l'état de la partie et des éliminations.
 | `/bd copy <source> <nouveau nom>` | Cloner une arène (translatée à votre position) |
 | `/bd delete <nom> [confirm]` | Supprimer une arène (confirmation requise) |
 | `/bd admin gui` | Ouvrir le GUI d'administration |
+| `/bd arene gui` | Ouvrir directement le GUI de sélection des arènes |
 | `/bd join <nom>` | Rejoindre une partie |
 | `/bd leave` | Quitter la partie en cours |
 | `/bd list` | Lister toutes les arènes |
@@ -122,7 +123,7 @@ Affichage en temps réel du score, de l'état de la partie et des éliminations.
 
 ## 🚀 Installation
 
-1. Télécharge le fichier **`BedwarsPlugin-1.0.6.jar`** depuis la [dernière release](../../releases/latest).
+1. Télécharge le fichier **`BedwarsPlugin-1.0.7.jar`** depuis la [dernière release](../../releases/latest).
 2. Place le `.jar` dans le dossier `plugins/` de ton serveur Paper 1.21+.
 3. Redémarre le serveur.
 4. Configure tes arènes avec les commandes `/bd ...` ci-dessus.
@@ -165,31 +166,25 @@ com.bedwars
 
 ---
 
-## 🆕 Nouveautés de la version 1.0.6
+## 🆕 Nouveautés de la version 1.0.7
 
-Cette version ajoute le **clonage d'arènes** et confirme une **compilation propre et vérifiée** du plugin.
+Cette version introduit un **accès direct au menu des arènes** et confirme une **compilation propre et vérifiée** du plugin.
 
-### 🆕 Clonage d'arènes (`/bd copy`)
-- **Nouvelle commande `/bd copy <arène source> <nouveau nom>`** : clone intégralement une arène
-  déjà configurée (zone de jeu, lits/spawns/PNJ Marchand+Amélioration de chaque équipe,
-  générateurs, nombre d'équipes/joueurs) vers une toute nouvelle arène, en translatant
-  TOUTES les coordonnées par le même décalage par rapport à ta position.
-- Le joueur se tient à l'endroit où la structure a été reconstruite à l'identique
-  (même point relatif que le `/bd <source> spec` d'origine) — un peu comme un « coller »
-  WorldEdit, mais pour toute la configuration Bedwars.
-- Si la copie est immédiatement complète, elle est directement recapturée et jouable ;
-  sinon elle reste en mode configuration (`/bd <nouveau> save` à faire une fois complétée).
-- Idéal pour déployer rapidement plusieurs exemplaires d'une même map et lancer plusieurs
-  parties simultanées sur le même layout.
+### 🆕 Menu d'arènes direct (`/bd arene gui`)
+- **Nouvelle commande `/bd arene gui`** : ouvre directement le GUI de sélection des arènes
+  pour le joueur qui tape la commande, sans passer par le PNJ d'administration.
+- Plus rapide et plus intuitif pour rejoindre une partie : un seul clic dans le menu paginé
+  (vert = disponible → on rejoint, rouge = en cours → spectateur, orange = pleine,
+  gris = non configurée). Idéal quand on ne veut pas poser/gérer un PNJ de hub.
 
 ### ✅ Fiabilité & compilation
-- Compilation vérifiée avec Maven + Paper 1.21.1 API (Java 21).
-- Récupération du skin Mojang pleinement asynchrone et sûre.
-- Le jar `BedwarsPlugin-1.0.6.jar` est compilé et prêt à l'emploi.
+- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
+- Récupération du skin Mojang pleinement asynchrone et sûre (`PlayerProfile#update()`).
+- Le jar `BedwarsPlugin-1.0.7.jar` est compilé et prêt à l'emploi.
 
 ### 🔄 Mise à jour
-- Numéro de version porté à **1.0.6** (`pom.xml` + `plugin.yml`).
-- README mis à jour (commande `/bd copy`, version 1.0.6).
+- Numéro de version porté à **1.0.7** (`pom.xml` + `plugin.yml`).
+- README mis à jour (commande `/bd arene gui`, version 1.0.7).
 
 ### 🎁 Fonctionnalités incluses (rappel)
 - Lobby flottant automatique (cage BARRIER invisible).
@@ -200,12 +195,18 @@ Cette version ajoute le **clonage d'arènes** et confirme une **compilation prop
 - Épée en bois protégée (non jetable/échangeable) au slot 1 de la hotbar.
 - Couleurs d'équipe génériques (recoloration automatique des blocs colorés).
 - GUI d'admin paginé + menu joueur avec codes couleur par statut.
+- Clonage d'arènes (`/bd copy`) et menu d'arènes direct (`/bd arene gui`).
 - Mort subite avec dragons, générateurs évolutifs, scoreboard dynamique.
 - Réinitialisation automatique de la map après chaque partie.
 
 ---
 
 ## 📜 Historique des versions
+
+### v1.0.7
+- **Nouveau** : menu d'arènes direct via `/bd arene gui`.
+- Compilation vérifiée avec Maven + Paper 1.21.1 API.
+- Version 1.0.7, README mis à jour (commande `/bd arene gui`).
 
 ### v1.0.6
 - **Nouveau** : clonage d'arènes via `/bd copy <source> <nouveau nom>` (translation de toute la configuration).
