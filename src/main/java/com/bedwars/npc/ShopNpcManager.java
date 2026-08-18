@@ -100,18 +100,15 @@ public class ShopNpcManager {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 PlayerProfile profile = Bukkit.createProfile(skinName);
-                // update() interroge les serveurs Mojang de façon asynchrone -> hors thread principal
-                profile = profile.update().join();
-                final PlayerProfile filled = profile;
-                Bukkit.getScheduler().runTask(plugin, () -> {
+                profile.update().thenAccept(updated -> Bukkit.getScheduler().runTask(plugin, () -> {
                     if (!stand.isValid()) return;
                     ItemStack head = stand.getEquipment().getHelmet();
                     if (head == null || head.getType() != Material.PLAYER_HEAD) return;
                     SkullMeta meta = (SkullMeta) head.getItemMeta();
-                    meta.setOwnerProfile(filled);
+                    meta.setOwnerProfile(updated);
                     head.setItemMeta(meta);
                     stand.getEquipment().setHelmet(head);
-                });
+                }));
             } catch (Exception e) {
                 plugin.getLogger().warning("Impossible de récupérer le skin '" + skinName + "': " + e.getMessage());
             }

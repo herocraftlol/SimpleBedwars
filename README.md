@@ -4,7 +4,7 @@
 > Crée tes arènes, configure le shop et les améliorations directement depuis le serveur,
 > puis lance des parties façon Hypixel — le tout pour **Paper 1.21+** (Java 21).
 
-![Version](https://img.shields.io/badge/version-1.0.5-blue)
+![Version](https://img.shields.io/badge/version-1.0.6-blue)
 ![Paper](https://img.shields.io/badge/Paper-1.21%2B-orange)
 ![Java](https://img.shields.io/badge/Java-21-red)
 ![License](https://img.shields.io/badge/build-Maven-success)
@@ -35,6 +35,8 @@ améliorations partagées, des pièges défensifs et une phase de **mort subite*
   point de spectateur, qui apparaît dès le premier joueur et disparaît au lancement.
 - ✅ **Réinitialisation automatique de la map** — sauvegarde/restauration de tous les blocs
   de la zone de jeu après chaque partie.
+- ✅ **Clonage d'arènes** — `/bd copy` duplique une arène complète en translatant toutes
+  ses coordonnées vers ta position, pour déployer plusieurs exemplaires d'une même map.
 - ✅ **Scoreboard dynamique**, GUI d'admin paginé, générateurs évolutifs, mort subite.
 
 ---
@@ -43,6 +45,7 @@ améliorations partagées, des pièges défensifs et une phase de **mort subite*
 
 ### 🏰 Création & configuration d'arènes
 - Création simple avec `/bd create <nom>`
+- **Clonage d'arène** avec `/bd copy <source> <nouveau nom>` (translation de toute la config)
 - Équipes de **2 / 4 / 6 / 8** joueurs
 - Définition des spawns, lits, générateurs et PNJ en jeu
 - Suppression sécurisée avec confirmation (`/bd delete <nom> confirm`)
@@ -91,6 +94,7 @@ Affichage en temps réel du score, de l'état de la partie et des éliminations.
 | Commande | Description |
 |----------|-------------|
 | `/bd create <nom>` | Créer une nouvelle arène |
+| `/bd copy <source> <nouveau nom>` | Cloner une arène (translatée à votre position) |
 | `/bd delete <nom> [confirm]` | Supprimer une arène (confirmation requise) |
 | `/bd admin gui` | Ouvrir le GUI d'administration |
 | `/bd join <nom>` | Rejoindre une partie |
@@ -118,7 +122,7 @@ Affichage en temps réel du score, de l'état de la partie et des éliminations.
 
 ## 🚀 Installation
 
-1. Télécharge le fichier **`BedwarsPlugin-1.0.5.jar`** depuis la [dernière release](../../releases/latest).
+1. Télécharge le fichier **`BedwarsPlugin-1.0.6.jar`** depuis la [dernière release](../../releases/latest).
 2. Place le `.jar` dans le dossier `plugins/` de ton serveur Paper 1.21+.
 3. Redémarre le serveur.
 4. Configure tes arènes avec les commandes `/bd ...` ci-dessus.
@@ -161,22 +165,31 @@ com.bedwars
 
 ---
 
-## 🆕 Nouveautés de la version 1.0.5
+## 🆕 Nouveautés de la version 1.0.6
 
-Cette version apporte une **compilation réussie et vérifiée** du plugin (plusieurs erreurs
-de compilation ont été corrigées) ainsi qu'une documentation mise à jour.
+Cette version ajoute le **clonage d'arènes** et confirme une **compilation propre et vérifiée** du plugin.
 
-### ✅ Corrections & fiabilité
-- **Compilation corrigée** : trois erreurs bloquantes résolues —
-  - `LeatherArmorMeta` déplacée vers le bon paquet (`org.bukkit.inventory.meta`).
-  - API de profil joueur corrigée : utilisation de `PlayerProfile#update()` (asynchrone)
-    à la place de la méthode `complete()` inexistante dans Paper 1.21.1.
-  - Récupération du skin Mojang désormais pleinement asynchrone et sûre.
-- Le jar `BedwarsPlugin-1.0.5.jar` est **compilé et testé** avec Maven + Paper 1.21.1 API.
+### 🆕 Clonage d'arènes (`/bd copy`)
+- **Nouvelle commande `/bd copy <arène source> <nouveau nom>`** : clone intégralement une arène
+  déjà configurée (zone de jeu, lits/spawns/PNJ Marchand+Amélioration de chaque équipe,
+  générateurs, nombre d'équipes/joueurs) vers une toute nouvelle arène, en translatant
+  TOUTES les coordonnées par le même décalage par rapport à ta position.
+- Le joueur se tient à l'endroit où la structure a été reconstruite à l'identique
+  (même point relatif que le `/bd <source> spec` d'origine) — un peu comme un « coller »
+  WorldEdit, mais pour toute la configuration Bedwars.
+- Si la copie est immédiatement complète, elle est directement recapturée et jouable ;
+  sinon elle reste en mode configuration (`/bd <nouveau> save` à faire une fois complétée).
+- Idéal pour déployer rapidement plusieurs exemplaires d'une même map et lancer plusieurs
+  parties simultanées sur le même layout.
+
+### ✅ Fiabilité & compilation
+- Compilation vérifiée avec Maven + Paper 1.21.1 API (Java 21).
+- Récupération du skin Mojang pleinement asynchrone et sûre.
+- Le jar `BedwarsPlugin-1.0.6.jar` est compilé et prêt à l'emploi.
 
 ### 🔄 Mise à jour
-- Numéro de version porté à **1.0.5** (`pom.xml` + `plugin.yml`).
-- README entièrement réécrit et rendu plus agréable à lire.
+- Numéro de version porté à **1.0.6** (`pom.xml` + `plugin.yml`).
+- README mis à jour (commande `/bd copy`, version 1.0.6).
 
 ### 🎁 Fonctionnalités incluses (rappel)
 - Lobby flottant automatique (cage BARRIER invisible).
@@ -193,6 +206,11 @@ de compilation ont été corrigées) ainsi qu'une documentation mise à jour.
 ---
 
 ## 📜 Historique des versions
+
+### v1.0.6
+- **Nouveau** : clonage d'arènes via `/bd copy <source> <nouveau nom>` (translation de toute la configuration).
+- Compilation vérifiée avec Maven + Paper 1.21.1 API.
+- Version 1.0.6, README mis à jour (commande `/bd copy`).
 
 ### v1.0.5
 - Compilation corrigée et vérifiée (LeatherArmorMeta, PlayerProfile API).

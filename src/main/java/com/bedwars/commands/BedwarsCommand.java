@@ -45,6 +45,9 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         if (sub.equals("delete")) {
             return handleDelete(sender, args);
         }
+        if (sub.equals("copy")) {
+            return handleCopy(sender, args);
+        }
         if (sub.equals("shop")) {
             return handleShopConfig(sender, args);
         }
@@ -268,6 +271,54 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(PREFIX + ChatColor.GREEN + "Article configuré: " + ChatColor.WHITE + amount + "x " + material.name()
                 + ChatColor.GREEN + " au slot " + slot + " de la catégorie " + ChatColor.YELLOW + category
                 + ChatColor.GREEN + " (" + price + " " + args[6] + ").");
+        return true;
+    }
+
+    /**
+     * /bd copy <arène source> <nouveau nom> : clone intégralement une arène déjà configurée
+     * vers une nouvelle, en translatant tous les points (zone de jeu, lits, spawns, PNJ,
+     * générateurs...) par rapport à la position du joueur — un peu comme un "coller" WorldEdit.
+     * Le joueur doit se tenir à l'endroit où la structure a été reconstruite à l'identique
+     * (au même emplacement relatif que le point /bd <source> spec de l'arène d'origine).
+     */
+    private boolean handleCopy(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("bedwars.admin")) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Vous n'avez pas la permission.");
+            return true;
+        }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Cette action doit être exécutée en jeu.");
+            return true;
+        }
+        if (args.length < 3) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd copy <arène source> <nouveau nom>");
+            sender.sendMessage(ChatColor.GRAY + "Tenez-vous à l'endroit où la structure a été reconstruite "
+                    + "(même point relatif que le /bd <source> spec d'origine) avant d'exécuter la commande.");
+            return true;
+        }
+
+        String sourceName = args[1];
+        String newName = args[2];
+
+        ArenaManager.CopyResult result = plugin.getArenaManager().copyArena(sourceName, newName, player.getLocation());
+        switch (result) {
+            case SOURCE_NOT_FOUND -> player.sendMessage(PREFIX + ChatColor.RED + "Arène source inconnue: " + sourceName);
+            case TARGET_ALREADY_EXISTS -> player.sendMessage(PREFIX + ChatColor.RED + "Une arène nommée " + newName + " existe déjà.");
+            case SOURCE_HAS_NO_SPEC -> player.sendMessage(PREFIX + ChatColor.RED
+                    + "L'arène source n'a pas de centre de lobby défini (/bd " + sourceName + " spec), impossible de la copier.");
+            case INVALID_NAME -> player.sendMessage(PREFIX + ChatColor.RED + "Nom invalide.");
+            case SUCCESS -> {
+                Arena copy = plugin.getArenaManager().getArena(newName);
+                plugin.getShopNpcManager().spawnForArena(copy);
+                if (copy.isSaved()) {
+                    player.sendMessage(PREFIX + ChatColor.GREEN + "Arène " + ChatColor.YELLOW + newName
+                            + ChatColor.GREEN + " créée à partir de " + sourceName + " et directement jouable !");
+                } else {
+                    player.sendMessage(PREFIX + ChatColor.YELLOW + "Arène " + newName + " créée à partir de " + sourceName
+                            + ", mais il manque encore des éléments (vérifiez avec /bd " + newName + " save).");
+                }
+            }
+        }
         return true;
     }
 
@@ -505,6 +556,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
     private void sendHelp(CommandSender sender) {
         sender.sendMessage(PREFIX + ChatColor.YELLOW + "Commandes disponibles:");
         sender.sendMessage(ChatColor.GRAY + "/bd create <nom>  |  /bd delete <nom>");
+        sender.sendMessage(ChatColor.GRAY + "/bd copy <source> <nouveau nom>" + ChatColor.DARK_GRAY + " (clone une arène, translatée à votre position)");
         sender.sendMessage(ChatColor.GRAY + "/bd shop <catégorie> <slot> <item> <quantité> <prix> <minerai>");
         sender.sendMessage(ChatColor.GRAY + "/bd admin gui");
         sender.sendMessage(ChatColor.GRAY + "/bd join <nom>  |  /bd leave  |  /bd list");
@@ -522,12 +574,13 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> options = new ArrayList<>();
         if (args.length == 1) {
-            options.addAll(List.of("create", "delete", "shop", "admin", "join", "leave", "list"));
+            options.addAll(List.of("create", "delete", "copy", "shop", "admin", "join", "leave", "list"));
             options.addAll(plugin.getArenaManager().getArenas().keySet());
         } else if (args.length == 2) {
             if (args[0].equalsIgnoreCase("admin")) {
                 options.add("gui");
-            } else if (args[0].equalsIgnoreCase("join") || args[0].equalsIgnoreCase("delete")) {
+            } else if (args[0].equalsIgnoreCase("join") || args[0].equalsIgnoreCase("delete")
+                    || args[0].equalsIgnoreCase("copy")) {
                 options.addAll(plugin.getArenaManager().getArenas().keySet());
             } else if (args[0].equalsIgnoreCase("shop")) {
                 options.addAll(plugin.getShopConfigManager().getCategories());

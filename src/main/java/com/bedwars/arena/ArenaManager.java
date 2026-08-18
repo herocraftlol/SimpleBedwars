@@ -4,6 +4,7 @@ import com.bedwars.BedwarsPlugin;
 import com.bedwars.util.LocationUtil;
 import com.bedwars.util.RegionSchematic;
 import org.bukkit.Location;
+import org.bukkit.World;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
@@ -183,5 +184,86 @@ public class ArenaManager {
         if (regionFile.exists() && !regionFile.delete()) {
             plugin.getLogger().warning("Impossible de supprimer le fichier " + regionFile.getName());
         }
+    }
+
+    /** Résultat de la copie d'une arène (voir {@link #copyArena}). */
+    public enum CopyResult {
+        SUCCESS,
+        SOURCE_NOT_FOUND,
+        TARGET_ALREADY_EXISTS,
+        SOURCE_HAS_NO_SPEC,
+        INVALID_NAME
+    }
+
+    /**
+     * Copie intégralement une arène existante (zone de jeu, lits/spawns/PNJ de chaque équipe,
+     * générateurs, nombre d'équipes/joueurs) vers une nouvelle arène, en translatant TOUTES les
+     * coordonnées par le même décalage par rapport à {@code newAnchor} (généralement la position
+     * du joueur qui exécute la commande, debout à l'endroit où la structure a été reconstruite
+     * à l'identique) — un peu comme un "coller" WorldEdit, mais pour toute la configuration Bedwars.
+     *
+     * L'ancre de départ est {@link Arena#getSpecLocation()} de la source (toujours définie sur
+     * une arène jouable). Si la nouvelle arène est immédiatement complète (aucun prérequis manquant),
+     * sa zone de jeu est directement recapturée à son nouvel emplacement et elle est marquée jouable ;
+     * sinon elle reste en mode configuration (/bd <nouveau> save à faire manuellement une fois complétée).
+     */
+    public CopyResult copyArena(String sourceName, String newName, Location newAnchor) {
+        if (newName == null || newName.isBlank()) return CopyResult.INVALID_NAME;
+
+        Arena source = getArena(sourceName);
+        if (source == null) return CopyResult.SOURCE_NOT_FOUND;
+        if (getArena(newName) != null) return CopyResult.TARGET_ALREADY_EXISTS;
+        if (source.getSpecLocation() == null) return CopyResult.SOURCE_HAS_NO_SPEC;
+
+        Location anchor = source.getSpecLocation();
+        double dx = newAnchor.getX() - anchor.getX();
+        double dy = newAnchor.getY() - anchor.getY();
+        double dz = newAnchor.getZ() - anchor.getZ();
+        World newWorld = newAnchor.getWorld();
+
+        Arena target = new Arena(newName);
+        target.setTeamCount(source.getTeamCount());
+        target.setPlayersPerTeam(source.getPlayersPerTeam());
+        target.setGamePos1(translate(source.getGamePos1(), dx, dy, dz, newWorld));
+        target.setGamePos2(translate(source.getGamePos2(), dx, dy, dz, newWorld));
+        target.setGameZoneConfirmed(source.isGameZoneConfirmed());
+        target.setSpecLocation(translate(source.getSpecLocation(), dx, dy, dz, newWorld));
+
+        for (Map.Entry<TeamColor, ArenaTeam> entry : source.getTeams().entrySet()) {
+            ArenaTeam srcTeam = entry.getValue();
+            ArenaTeam dstTeam = target.getOrCreateTeam(entry.getKey());
+            dstTeam.setBedLocation(translate(srcTeam.getBedLocation(), dx, dy, dz, newWorld));
+            dstTeam.setSpawnLocation(translate(srcTeam.getSpawnLocation(), dx, dy, dz, newWorld));
+            dstTeam.setShopLocation(translate(srcTeam.getShopLocation(), dx, dy, dz, newWorld));
+            dstTeam.setUpgradeLocation(translate(srcTeam.getUpgradeLocation(), dx, dy, dz, newWorld));
+        }
+
+        for (Generator gen : source.getGenerators()) {
+            Location loc = translate(gen.getLocation(), dx, dy, dz, newWorld);
+            Generator newGen = new Generator(gen.getType(), loc);
+            newGen.setTeam(gen.getTeam());
+            target.getGenerators().add(newGen);
+        }
+
+        arenas.put(newName.toLowerCase(), target);
+
+        // La structure est censée avoir déjà été reconstruite à l'identique à cet emplacement :
+        // on peut donc recapturer directement sa zone de jeu (comme le ferait /bd <nom> save).
+        if (target.getGamePos1() != null && target.getGamePos2() != null) {
+            captureRegion(target);
+        }
+        if (target.getMissingRequirements().isEmpty()) {
+            target.setSaved(true);
+            target.setState(ArenaState.WAITING);
+        }
+        saveArena(target);
+
+        return CopyResult.SUCCESS;
+    }
+
+    /** Translate une localisation du décalage donné, en la replaçant dans le nouveau monde. Conserve yaw/pitch. */
+    private Location translate(Location loc, double dx, double dy, double dz, World newWorld) {
+        if (loc == null) return null;
+        return new Location(newWorld, loc.getX() + dx, loc.getY() + dy, loc.getZ() + dz, loc.getYaw(), loc.getPitch());
     }
 }
