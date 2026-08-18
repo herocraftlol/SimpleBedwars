@@ -15,6 +15,8 @@ public class Arena {
 
     private int teamCount = 0;       // 2, 4, 6 ou 8
     private int playersPerTeam = 0;  // 2 à 16
+    /** Nombre de joueurs minimum pour lancer le compte à rebours (-1 = attendre que ce soit complet). */
+    private int minPlayers = -1;
 
     private final Map<TeamColor, ArenaTeam> teams = new EnumMap<>(TeamColor.class);
     private final List<Generator> generators = new ArrayList<>();
@@ -127,12 +129,30 @@ public class Arena {
         return teamCount * playersPerTeam;
     }
 
+    public int getMinPlayers() {
+        return minPlayers;
+    }
+
+    public void setMinPlayers(int minPlayers) {
+        this.minPlayers = minPlayers;
+    }
+
+    /** Seuil effectif pour lancer le compte à rebours : minPlayers si défini, sinon la salle pleine. */
+    public int getEffectiveMinPlayers() {
+        return minPlayers > 0 ? Math.min(minPlayers, getMaxPlayers()) : getMaxPlayers();
+    }
+
     public int getCurrentPlayerCount() {
         return waitingPlayers.size();
     }
 
     public boolean isLobbyFull() {
         return teamCount > 0 && getCurrentPlayerCount() >= getMaxPlayers();
+    }
+
+    /** true si assez de joueurs sont présents pour lancer le compte à rebours (voir minPlayers). */
+    public boolean isReadyToStart() {
+        return teamCount > 0 && getCurrentPlayerCount() >= getEffectiveMinPlayers();
     }
 
     /**

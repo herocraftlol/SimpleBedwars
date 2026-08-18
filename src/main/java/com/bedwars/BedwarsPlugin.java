@@ -9,6 +9,7 @@ import com.bedwars.gui.AdminNPCManager;
 import com.bedwars.listeners.CombatListener;
 import com.bedwars.listeners.GUIListener;
 import com.bedwars.listeners.KitProtectionListener;
+import com.bedwars.listeners.LobbyItemListener;
 import com.bedwars.listeners.OreMergeListener;
 import com.bedwars.listeners.PlayerProtectionListener;
 import com.bedwars.listeners.ShopListener;
@@ -40,6 +41,7 @@ public class BedwarsPlugin extends JavaPlugin {
         instance = this;
         saveDefaultConfig();
         KitProtectionUtil.init(this);
+        com.bedwars.util.LobbyItemUtil.init(this);
 
         this.arenaManager = new ArenaManager(this);
         this.scoreboardManager = new ScoreboardManager();
@@ -67,6 +69,7 @@ public class BedwarsPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new PlayerProtectionListener(this), this);
         getServer().getPluginManager().registerEvents(new ShopListener(this), this);
         getServer().getPluginManager().registerEvents(new KitProtectionListener(this), this);
+        getServer().getPluginManager().registerEvents(new LobbyItemListener(this), this);
 
         getLogger().info("BedwarsPlugin activé — " + arenaManager.getArenas().size() + " arène(s) chargée(s).");
     }

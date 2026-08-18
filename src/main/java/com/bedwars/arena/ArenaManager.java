@@ -73,6 +73,7 @@ public class ArenaManager {
         config.set("name", arena.getName());
         config.set("teamCount", arena.getTeamCount());
         config.set("playersPerTeam", arena.getPlayersPerTeam());
+        config.set("minPlayers", arena.getMinPlayers());
         config.set("saved", arena.isSaved());
         config.set("gameZoneConfirmed", arena.isGameZoneConfirmed());
 
@@ -125,6 +126,7 @@ public class ArenaManager {
         Arena arena = new Arena(name);
         arena.setTeamCount(config.getInt("teamCount", 0));
         arena.setPlayersPerTeam(config.getInt("playersPerTeam", 0));
+        arena.setMinPlayers(config.getInt("minPlayers", -1));
         arena.setSaved(config.getBoolean("saved", false));
         arena.setGameZoneConfirmed(config.getBoolean("gameZoneConfirmed", false));
 
@@ -224,6 +226,7 @@ public class ArenaManager {
         Arena target = new Arena(newName);
         target.setTeamCount(source.getTeamCount());
         target.setPlayersPerTeam(source.getPlayersPerTeam());
+        target.setMinPlayers(source.getMinPlayers());
         target.setGamePos1(translate(source.getGamePos1(), dx, dy, dz, newWorld));
         target.setGamePos2(translate(source.getGamePos2(), dx, dy, dz, newWorld));
         target.setGameZoneConfirmed(source.isGameZoneConfirmed());

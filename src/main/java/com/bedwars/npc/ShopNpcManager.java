@@ -100,15 +100,16 @@ public class ShopNpcManager {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 PlayerProfile profile = Bukkit.createProfile(skinName);
-                profile.update().thenAccept(updated -> Bukkit.getScheduler().runTask(plugin, () -> {
+                profile.update().join(); // appel réseau bloquant -> hors thread principal
+                Bukkit.getScheduler().runTask(plugin, () -> {
                     if (!stand.isValid()) return;
                     ItemStack head = stand.getEquipment().getHelmet();
                     if (head == null || head.getType() != Material.PLAYER_HEAD) return;
                     SkullMeta meta = (SkullMeta) head.getItemMeta();
-                    meta.setOwnerProfile(updated);
+                    meta.setOwnerProfile(profile);
                     head.setItemMeta(meta);
                     stand.getEquipment().setHelmet(head);
-                }));
+                });
             } catch (Exception e) {
                 plugin.getLogger().warning("Impossible de récupérer le skin '" + skinName + "': " + e.getMessage());
             }

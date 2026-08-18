@@ -54,6 +54,19 @@ public class GameManager {
         return null;
     }
 
+    /** Fait quitter proprement un joueur de la partie/du lobby où il se trouve, et le renvoie au spawn du monde. */
+    public boolean leave(Player player) {
+        GameInstance instance = findInstanceOf(player);
+        if (instance == null) return false;
+        instance.removeWaitingPlayer(player);
+        player.setGameMode(org.bukkit.GameMode.SURVIVAL);
+        player.getInventory().clear();
+        if (player.getWorld().getSpawnLocation() != null) {
+            player.teleport(player.getWorld().getSpawnLocation());
+        }
+        return true;
+    }
+
     public void shutdownAll() {
         instances.clear();
     }

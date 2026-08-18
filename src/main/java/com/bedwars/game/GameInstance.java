@@ -6,6 +6,7 @@ import com.bedwars.upgrade.TeamUpgrades;
 import com.bedwars.upgrade.TrapType;
 import com.bedwars.shop.ToolTier;
 import com.bedwars.util.KitProtectionUtil;
+import com.bedwars.util.LobbyItemUtil;
 import org.bukkit.*;
 import org.bukkit.entity.EnderDragon;
 import org.bukkit.entity.EntityType;
@@ -33,6 +34,8 @@ public class GameInstance {
     private final Map<TeamColor, TeamUpgrades> teamUpgrades = new EnumMap<>(TeamColor.class);
     private final Map<UUID, Integer> pickaxeTier = new HashMap<>();
     private final Map<UUID, Integer> axeTier = new HashMap<>();
+    /** Équipe demandée par un joueur dans le lobby (voir l'item "Choisir son équipe"), avant le lancement. */
+    private final Map<UUID, TeamColor> preferredTeam = new HashMap<>();
 
     private BukkitTask lobbyCountdownTask;
     private int lobbyCountdown;
@@ -83,18 +86,59 @@ public class GameInstance {
         if (center != null) {
             player.teleport(center);
         }
+        giveLobbyItems(player);
 
         broadcastToArena(ChatColor.YELLOW + player.getName() + ChatColor.GRAY + " a rejoint la partie ("
                 + arena.getCurrentPlayerCount() + "/" + arena.getMaxPlayers() + ")");
-        if (arena.isLobbyFull() && arena.getState() == ArenaState.WAITING) {
+        if (arena.isReadyToStart() && arena.getState() == ArenaState.WAITING) {
             startCountdown();
         }
         return true;
     }
 
+    /** Donne les items spéciaux du lobby d'attente : forcer le lancement (admin), choisir son équipe, quitter. */
+    private void giveLobbyItems(Player player) {
+        if (player.hasPermission("bedwars.admin")) {
+            player.getInventory().setItem(LobbyItemUtil.SLOT_FORCE_START, LobbyItemUtil.createForceStartItem());
+        }
+        player.getInventory().setItem(LobbyItemUtil.SLOT_TEAM_SELECT, LobbyItemUtil.createTeamSelectItem());
+        player.getInventory().setItem(LobbyItemUtil.SLOT_LEAVE, LobbyItemUtil.createLeaveItem());
+    }
+
+    public void setPreferredTeam(UUID uuid, TeamColor color) {
+        preferredTeam.put(uuid, color);
+    }
+
+    public TeamColor getPreferredTeam(UUID uuid) {
+        return preferredTeam.get(uuid);
+    }
+
+    /** Nombre de joueurs ayant déjà choisi cette équipe (pour l'affichage dans le menu de sélection). */
+    public int countPreferred(TeamColor color) {
+        int count = 0;
+        for (TeamColor c : preferredTeam.values()) {
+            if (c == color) count++;
+        }
+        return count;
+    }
+
+    /** Lance la partie immédiatement, peu importe le nombre de joueurs (réservé aux admins, voir le diamant du lobby). */
+    public void forceStart(Player initiator) {
+        if (arena.getState() != ArenaState.WAITING && arena.getState() != ArenaState.STARTING) return;
+        if (arena.getWaitingPlayers().isEmpty()) {
+            initiator.sendMessage(ChatColor.RED + "Impossible de lancer : personne n'attend dans le lobby.");
+            return;
+        }
+        if (lobbyCountdownTask != null) lobbyCountdownTask.cancel();
+        broadcastToArena(ChatColor.AQUA + "" + ChatColor.BOLD + initiator.getName() + ChatColor.GRAY
+                + " force le lancement de la partie !");
+        startGame();
+    }
+
     public void removeWaitingPlayer(Player player) {
         arena.getWaitingPlayers().remove(player.getUniqueId());
-        if (arena.getState() == ArenaState.STARTING && !arena.isLobbyFull()) {
+        preferredTeam.remove(player.getUniqueId());
+        if (arena.getState() == ArenaState.STARTING && !arena.isReadyToStart()) {
             cancelCountdown();
         }
         if (arena.getWaitingPlayers().isEmpty() && arena.getState() != ArenaState.PLAYING
@@ -159,18 +203,49 @@ public class GameInstance {
 
     private void assignTeams() {
         TeamColor[] colors = TeamColor.forTeamCount(arena.getTeamCount());
+        int perTeam = Math.max(1, arena.getPlayersPerTeam());
         List<UUID> players = new ArrayList<>(arena.getWaitingPlayers());
         Collections.shuffle(players);
 
-        int index = 0;
+        Map<TeamColor, Integer> counts = new EnumMap<>(TeamColor.class);
+        for (TeamColor c : colors) counts.put(c, 0);
+
+        List<UUID> remaining = new ArrayList<>();
+        // On honore d'abord les équipes choisies dans le lobby (si elles ne sont pas déjà pleines).
         for (UUID uuid : players) {
-            TeamColor color = colors[index % colors.length];
-            ArenaTeam team = arena.getOrCreateTeam(color);
-            team.getMembers().add(uuid);
-            team.getAlivePlayers().add(uuid);
-            playerTeams.put(uuid, color);
+            TeamColor preferred = preferredTeam.get(uuid);
+            boolean valid = preferred != null && counts.containsKey(preferred) && counts.get(preferred) < perTeam;
+            if (valid) {
+                assignPlayerToTeam(uuid, preferred);
+                counts.put(preferred, counts.get(preferred) + 1);
+            } else {
+                remaining.add(uuid);
+            }
+        }
+        // Puis on répartit le reste équitablement entre les équipes qui ont encore de la place.
+        int index = 0;
+        for (UUID uuid : remaining) {
+            TeamColor chosen = null;
+            for (int i = 0; i < colors.length; i++) {
+                TeamColor candidate = colors[(index + i) % colors.length];
+                if (counts.get(candidate) < perTeam) {
+                    chosen = candidate;
+                    break;
+                }
+            }
+            if (chosen == null) chosen = colors[index % colors.length]; // trop de joueurs pour les équipes : cas limite
+            assignPlayerToTeam(uuid, chosen);
+            counts.put(chosen, counts.getOrDefault(chosen, 0) + 1);
             index++;
         }
+        preferredTeam.clear();
+    }
+
+    private void assignPlayerToTeam(UUID uuid, TeamColor color) {
+        ArenaTeam team = arena.getOrCreateTeam(color);
+        team.getMembers().add(uuid);
+        team.getAlivePlayers().add(uuid);
+        playerTeams.put(uuid, color);
     }
 
     private void giveKit(Player player, TeamColor color) {
@@ -671,6 +746,7 @@ public class GameInstance {
         groundItems.clear();
         pickaxeTier.clear();
         axeTier.clear();
+        preferredTeam.clear();
         elapsedSeconds = 0;
         phase = 1;
         suddenDeathTriggered = false;

@@ -2,7 +2,6 @@ package com.bedwars.commands;
 
 import com.bedwars.BedwarsPlugin;
 import com.bedwars.arena.*;
-import com.bedwars.game.GameInstance;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
@@ -113,6 +112,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
                 arena.setSpecLocation(player.getLocation());
                 player.sendMessage(PREFIX + "Centre du lobby d'attente / spawn spectateurs défini pour " + arena.getName() + ".");
             }
+            case "minplayers" -> handleMinPlayers(player, arena, args);
             case "save" -> handleSave(player, arena);
             case "config" -> {
                 arena.setSaved(false);
@@ -380,12 +380,10 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
 
     private boolean handleLeave(CommandSender sender) {
         if (!(sender instanceof Player player)) return true;
-        GameInstance instance = plugin.getGameManager().findInstanceOf(player);
-        if (instance == null) {
+        if (!plugin.getGameManager().leave(player)) {
             player.sendMessage(PREFIX + ChatColor.RED + "Vous n'êtes dans aucune partie.");
             return true;
         }
-        instance.removeWaitingPlayer(player);
         player.sendMessage(PREFIX + "Vous avez quitté la partie.");
         return true;
     }
@@ -515,6 +513,34 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
                 + " placé pour l'équipe " + color.getColoredName() + ChatColor.GREEN + ".");
     }
 
+    /** /bd <nom> minplayers <nombre> : nombre de joueurs minimum pour lancer le compte à rebours. */
+    private void handleMinPlayers(Player player, Arena arena, String[] args) {
+        if (args.length < 3) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd " + arena.getName() + " minplayers <nombre|off>");
+            return;
+        }
+        if (args[2].equalsIgnoreCase("off")) {
+            arena.setMinPlayers(-1);
+            player.sendMessage(PREFIX + ChatColor.GREEN + "Minimum de joueurs désactivé : il faudra que le lobby soit plein "
+                    + "(" + arena.getMaxPlayers() + " joueurs) pour lancer automatiquement la partie.");
+            return;
+        }
+        int value;
+        try {
+            value = Integer.parseInt(args[2]);
+        } catch (NumberFormatException e) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Le nombre de joueurs doit être un nombre entier (ou 'off').");
+            return;
+        }
+        if (value < 1) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Le nombre de joueurs minimum doit être supérieur à 0.");
+            return;
+        }
+        arena.setMinPlayers(value);
+        player.sendMessage(PREFIX + ChatColor.GREEN + "Nombre de joueurs minimum défini à " + ChatColor.YELLOW + value
+                + ChatColor.GREEN + " pour " + arena.getName() + " (le compte à rebours démarrera dès ce seuil atteint).");
+    }
+
     private void handleSave(Player player, Arena arena) {
         List<String> missing = arena.getMissingRequirements();
         if (!missing.isEmpty()) {
@@ -563,6 +589,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> item <fer|or|diamand|emeraude>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> shop <shop|upgrade> color <couleur> [pseudo]");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> spec " + ChatColor.DARK_GRAY + "(= centre du lobby d'attente flottant)");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> minplayers <nombre|off>" + ChatColor.DARK_GRAY + " (seuil pour lancer le compte à rebours)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> save  |  /bd <nom> config");
     }
 
@@ -583,7 +610,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
                 options.addAll(List.of("blocks", "melee", "armor", "ranged", "potions", "utility"));
             } else if (plugin.getArenaManager().getArena(args[0]) != null) {
                 options.addAll(List.of("equipe", "pos1", "pos2", "posconfirm", "bed", "spawn",
-                        "item", "shop", "spec", "save", "config"));
+                        "item", "shop", "spec", "minplayers", "save", "config"));
             }
         } else if (args.length == 7 && args[0].equalsIgnoreCase("shop")) {
             options.addAll(List.of("fer", "or", "diamand", "emeraude"));

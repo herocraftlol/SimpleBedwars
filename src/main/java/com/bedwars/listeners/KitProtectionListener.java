@@ -2,6 +2,7 @@ package com.bedwars.listeners;
 
 import com.bedwars.BedwarsPlugin;
 import com.bedwars.util.KitProtectionUtil;
+import com.bedwars.util.LobbyItemUtil;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -13,13 +14,18 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
 /**
- * Empêche toute manipulation de l'épée en bois protégée (kit de base, toujours au
- * slot 0 de la hotbar) : impossible de la drop, déplacer, dupliquer, échanger avec la
- * main secondaire, ou en sortir de quelque façon que ce soit tant qu'une partie est en cours.
+ * Empêche toute manipulation des items protégés d'un joueur en partie/lobby :
+ *  - l'épée en bois du kit de base (toujours au slot 0) ;
+ *  - les 3 items spéciaux du lobby d'attente (diamant "forcer le lancement" au slot 0,
+ *    bloc "choisir son équipe" au slot 2, barrière "quitter" au slot 4).
+ * Impossible de les drop, déplacer, dupliquer, échanger avec la main secondaire, ou les
+ * sortir de quelque façon que ce soit tant que le joueur est en jeu/en lobby.
  */
 public class KitProtectionListener implements Listener {
 
     private final BedwarsPlugin plugin;
+    /** Slots protégés dans la hotbar (épée + items du lobby, qui ne se chevauchent jamais). */
+    private static final int[] PROTECTED_SLOTS = {0, LobbyItemUtil.SLOT_TEAM_SELECT, LobbyItemUtil.SLOT_LEAVE};
 
     public KitProtectionListener(BedwarsPlugin plugin) {
         this.plugin = plugin;
@@ -29,17 +35,20 @@ public class KitProtectionListener implements Listener {
         return plugin.getGameManager().findInstanceOf(player) != null;
     }
 
+    private boolean isLocked(ItemStack item) {
+        return KitProtectionUtil.isProtectedSword(item) || LobbyItemUtil.isAnyLobbyItem(item);
+    }
+
     @EventHandler
     public void onDrop(PlayerDropItemEvent event) {
-        if (KitProtectionUtil.isProtectedSword(event.getItemDrop().getItemStack())) {
+        if (isLocked(event.getItemDrop().getItemStack())) {
             event.setCancelled(true);
         }
     }
 
     @EventHandler
     public void onSwapHands(PlayerSwapHandItemsEvent event) {
-        if (KitProtectionUtil.isProtectedSword(event.getMainHandItem())
-                || KitProtectionUtil.isProtectedSword(event.getOffHandItem())) {
+        if (isLocked(event.getMainHandItem()) || isLocked(event.getOffHandItem())) {
             event.setCancelled(true);
         }
     }
@@ -47,12 +56,12 @@ public class KitProtectionListener implements Listener {
     @EventHandler
     public void onDrag(InventoryDragEvent event) {
         if (!(event.getWhoClicked() instanceof Player player) || !inGame(player)) return;
-        if (KitProtectionUtil.isProtectedSword(event.getOldCursor())) {
+        if (isLocked(event.getOldCursor())) {
             event.setCancelled(true);
             return;
         }
         for (ItemStack item : event.getNewItems().values()) {
-            if (KitProtectionUtil.isProtectedSword(item)) {
+            if (isLocked(item)) {
                 event.setCancelled(true);
                 return;
             }
@@ -67,27 +76,27 @@ public class KitProtectionListener implements Listener {
             return; // pas l'inventaire du joueur (un shop/GUI custom est déjà géré ailleurs)
         }
 
-        // Le slot 0 lui-même : jamais touchable (empêche de le remplacer / le sortir).
-        if (event.getSlot() == 0 && event.getClickedInventory() instanceof PlayerInventory) {
-            ItemStack currentAtZero = event.getClickedInventory().getItem(0);
-            if (KitProtectionUtil.isProtectedSword(currentAtZero)) {
-                event.setCancelled(true);
-                return;
+        // Les slots protégés eux-mêmes : jamais touchables (empêche de les remplacer / les sortir).
+        if (event.getClickedInventory() instanceof PlayerInventory) {
+            for (int protectedSlot : PROTECTED_SLOTS) {
+                if (event.getSlot() == protectedSlot && isLocked(event.getClickedInventory().getItem(protectedSlot))) {
+                    event.setCancelled(true);
+                    return;
+                }
             }
         }
 
-        // L'item cliqué ou sous le curseur est l'épée protégée : bloque tout déplacement.
-        if (KitProtectionUtil.isProtectedSword(event.getCurrentItem())
-                || KitProtectionUtil.isProtectedSword(event.getCursor())) {
+        // L'item cliqué ou sous le curseur est protégé : bloque tout déplacement.
+        if (isLocked(event.getCurrentItem()) || isLocked(event.getCursor())) {
             event.setCancelled(true);
             return;
         }
 
-        // Échange via une touche numérique (1-9) impliquant le slot 0 de la hotbar.
-        if (event.getHotbarButton() == 0) {
-            ItemStack hotbarSlotZero = player.getInventory().getItem(0);
-            if (KitProtectionUtil.isProtectedSword(hotbarSlotZero)) {
+        // Échange via une touche numérique (1-9) impliquant un slot protégé de la hotbar.
+        for (int protectedSlot : PROTECTED_SLOTS) {
+            if (event.getHotbarButton() == protectedSlot && isLocked(player.getInventory().getItem(protectedSlot))) {
                 event.setCancelled(true);
+                return;
             }
         }
     }
