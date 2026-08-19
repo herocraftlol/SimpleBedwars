@@ -9,9 +9,9 @@ import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Zombie;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
 import org.bukkit.inventory.meta.SkullMeta;
@@ -25,20 +25,23 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Gère les PNJ "Marchand" et "Amélioration" : des Armor Stands immobiles à taille et pose
- * de joueur (tête de joueur + armure en cuir teintée à la couleur de l'équipe), un par équipe
- * et par arène. Cliquer dessus ouvre le GUI shop ou améliorations correspondant.
+ * Gère les PNJ "Marchand" et "Amélioration" : des mobs immobiles (IA désactivée, invulnérables)
+ * habillés d'une tête de joueur et d'une armure en cuir teintée à la couleur de l'équipe, un par
+ * équipe et par arène. Cliquer dessus ouvre le GUI shop ou améliorations correspondant.
  *
- * Remarque : sans plugin tiers (Citizens) ou paquets réseau bruts, il n'existe pas de moyen
- * public de faire apparaître une vraie entité "Joueur" via l'API Bukkit/Paper. On utilise donc
- * un Armor Stand habillé d'une tête de joueur (skin réel si un pseudo est fourni, récupéré de
- * façon asynchrone via l'API Mojang) : silhouette et pose humaines, immobile, cliquable.
+ * Pourquoi un Zombie plutôt qu'un Armor Stand : les Armor Stands utilisent un événement de clic
+ * séparé et "positionnel" (PlayerInteractAtEntityEvent, avec la position exacte du clic sur le
+ * corps), ce qui les rend peu fiables pour ouvrir un menu de façon garantie selon l'endroit
+ * précis cliqué. Un mob classique (ici un Zombie, IA/dégâts/combustion désactivés) déclenche
+ * toujours l'événement standard et fiable PlayerInteractEntityEvent, quel que soit l'endroit
+ * cliqué sur son corps — d'où ce choix, malgré l'absence de vrai skin de joueur sans plugin
+ * tiers (Citizens) ou paquets réseau bruts. La tête de joueur (skin réel si un pseudo est
+ * fourni) + l'armure en cuir teintée suffisent à donner une allure de "PNJ vendeur" correcte.
  *
- * Important (anti-duplication) : ces PNJ ne sont PLUS persistés par le monde (setPersistent(false))
- * — le plugin les respawn lui-même à chaque démarrage (spawnAll()), donc Minecraft n'a pas besoin
- * de les sauvegarder. Avant chaque spawn, on charge en plus le chunk concerné et on supprime tout
- * PNJ résiduel marqué par notre tag trouvé à proximité, ce qui nettoie aussi définitivement les
- * doublons déjà accumulés par d'anciennes versions (où ils étaient encore persistants).
+ * Anti-duplication : ces PNJ ne sont pas persistés par le monde (setPersistent(false)) — c'est
+ * le plugin qui les fait toujours réapparaître lui-même au démarrage (spawnAll()). Avant chaque
+ * apparition, le chunk concerné est chargé puis purgé de tout PNJ résiduel marqué par notre tag
+ * interne, ce qui nettoie aussi les doublons éventuellement déjà accumulés par le passé.
  */
 public class ShopNpcManager {
 
@@ -81,40 +84,45 @@ public class ShopNpcManager {
     public void spawnOne(Arena arena, TeamColor color, NpcType type, Location location, String skinName) {
         purgeStrayNpcsNear(location);
 
-        ArmorStand stand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
-        stand.setInvulnerable(true);
-        stand.setGravity(false);
-        // Ne JAMAIS rendre ces PNJ persistants : le plugin les respawn lui-même à chaque démarrage
-        // (spawnAll()) ; les laisser persistants est ce qui causait les doublons fantômes après
-        // chaque redémarrage (l'ancien restait dans le monde, un nouveau était recréé par-dessus).
-        stand.setPersistent(false);
-        stand.getPersistentDataContainer().set(markerKey, PersistentDataType.BYTE, (byte) 1);
-        stand.setArms(true);
-        stand.setBasePlate(false);
-        stand.setSmall(false);
-        stand.setCollidable(false);
+        Zombie npc = (Zombie) location.getWorld().spawnEntity(location, EntityType.ZOMBIE);
+        npc.setBaby(false);
+        npc.setAI(false);
+        npc.setInvulnerable(true);
+        npc.setSilent(true);
+        npc.setCollidable(false);
+        npc.setCanPickupItems(false);
+        npc.setShouldBurnInDay(false); // sinon il prend feu en plein jour malgré l'invulnérabilité
+        npc.setRemoveWhenFarAway(false);
+        npc.setPersistent(false); // le plugin le respawn lui-même : jamais sauvegardé par le monde
+        npc.getPersistentDataContainer().set(markerKey, PersistentDataType.BYTE, (byte) 1);
 
         String label = type == NpcType.SHOP ? "Marchand" : "Amélioration";
-        stand.setCustomName(color.getChatColor() + "" + ChatColor.BOLD + label + ChatColor.RESET
+        npc.setCustomName(color.getChatColor() + "" + ChatColor.BOLD + label + ChatColor.RESET
                 + " " + color.getColoredName());
-        stand.setCustomNameVisible(true);
+        npc.setCustomNameVisible(true);
 
-        // Tenue : plastron/jambières/bottes en cuir teintés à la couleur de l'équipe.
-        stand.getEquipment().setChestplate(dyed(Material.LEATHER_CHESTPLATE, color));
-        stand.getEquipment().setLeggings(dyed(Material.LEATHER_LEGGINGS, color));
-        stand.getEquipment().setBoots(dyed(Material.LEATHER_BOOTS, color));
-
-        // Tête : tête de joueur (skin par défaut du serveur, ou skin réel si un pseudo est précisé).
-        ItemStack head = new ItemStack(Material.PLAYER_HEAD);
-        stand.getEquipment().setHelmet(head);
+        // Tenue : tête de joueur + plastron/jambières/bottes en cuir teintés à la couleur de l'équipe.
+        npc.getEquipment().setHelmet(buildHead());
+        npc.getEquipment().setChestplate(dyed(Material.LEATHER_CHESTPLATE, color));
+        npc.getEquipment().setLeggings(dyed(Material.LEATHER_LEGGINGS, color));
+        npc.getEquipment().setBoots(dyed(Material.LEATHER_BOOTS, color));
+        npc.getEquipment().setHelmetDropChance(0f);
+        npc.getEquipment().setChestplateDropChance(0f);
+        npc.getEquipment().setLeggingsDropChance(0f);
+        npc.getEquipment().setBootsDropChance(0f);
+        npc.getEquipment().setItemInMainHandDropChance(0f);
 
         String effectiveSkin = skinName != null ? skinName
                 : plugin.getConfig().getString("npc.default-skin", null);
         if (effectiveSkin != null && !effectiveSkin.isBlank()) {
-            applySkinAsync(stand, effectiveSkin);
+            applySkinAsync(npc, effectiveSkin);
         }
 
-        registry.put(stand.getUniqueId(), new NpcInfo(arena.getName(), color, type));
+        registry.put(npc.getUniqueId(), new NpcInfo(arena.getName(), color, type));
+    }
+
+    private ItemStack buildHead() {
+        return new ItemStack(Material.PLAYER_HEAD);
     }
 
     /**
@@ -124,7 +132,7 @@ public class ShopNpcManager {
     private void purgeStrayNpcsNear(Location location) {
         location.getChunk().load();
         for (Entity entity : location.getWorld().getNearbyEntities(location, 3, 3, 3)) {
-            if (entity instanceof ArmorStand && isOurNpc(entity)) {
+            if (isOurNpc(entity)) {
                 registry.remove(entity.getUniqueId());
                 entity.remove();
             }
@@ -137,19 +145,19 @@ public class ShopNpcManager {
         return value != null && value == (byte) 1;
     }
 
-    private void applySkinAsync(ArmorStand stand, String skinName) {
+    private void applySkinAsync(Zombie npc, String skinName) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 PlayerProfile profile = Bukkit.createProfile(skinName);
                 profile.update().join(); // appel réseau bloquant -> hors thread principal
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (!stand.isValid()) return;
-                    ItemStack head = stand.getEquipment().getHelmet();
+                    if (!npc.isValid()) return;
+                    ItemStack head = npc.getEquipment().getHelmet();
                     if (head == null || head.getType() != Material.PLAYER_HEAD) return;
                     SkullMeta meta = (SkullMeta) head.getItemMeta();
                     meta.setOwnerProfile(profile);
                     head.setItemMeta(meta);
-                    stand.getEquipment().setHelmet(head);
+                    npc.getEquipment().setHelmet(head);
                 });
             } catch (Exception e) {
                 plugin.getLogger().warning("Impossible de récupérer le skin '" + skinName + "': " + e.getMessage());

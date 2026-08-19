@@ -9,7 +9,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.player.PlayerInteractAtEntityEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 
 /**
  * Gère le clic sur les PNJ marchand/amélioration (ouverture du bon GUI) ainsi que
@@ -24,7 +24,8 @@ public class ShopListener implements Listener {
     }
 
     @EventHandler
-    public void onNpcInteract(PlayerInteractAtEntityEvent event) {
+    public void onNpcInteract(PlayerInteractEntityEvent event) {
+        if (event.getHand() != org.bukkit.inventory.EquipmentSlot.HAND) return; // évite le double-déclenchement main/off-hand
         ShopNpcManager.NpcInfo info = plugin.getShopNpcManager().getInfo(event.getRightClicked().getUniqueId());
         if (info == null) return;
         event.setCancelled(true);

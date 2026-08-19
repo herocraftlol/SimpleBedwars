@@ -13,7 +13,7 @@ dragons.
 
 ## 📦 Installation
 
-1. Télécharge le fichier `BedwarsPlugin-1.0.9.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
+1. Télécharge le fichier `BedwarsPlugin-1.0.10.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
 2. Place le `.jar` dans le dossier `plugins/` de ton serveur Paper 1.21+.
 3. Redémarre le serveur.
 4. Configure tes arènes avec les commandes `/bd ...` (voir ci-dessous).
@@ -59,11 +59,12 @@ Permission `bedwars.admin` (op par défaut) pour tout ce qui configure/supprime 
 ## Nouveautés de cette itération
 
 - **PNJ Marchand / Amélioration** (`ShopNpcManager`) : placés via `/bd <nom> shop <shop|upgrade> color <couleur> [pseudo]`,
-  ce sont des Armor Stands immobiles à taille/pose humaine, en armure de cuir teintée à la couleur
-  de l'équipe, avec une tête de joueur. Si un pseudo Minecraft est fourni, son skin réel est
-  récupéré de façon asynchrone (API Mojang via `PlayerProfile#complete`) et appliqué à la tête.
-  Sans pseudo, la tête reste neutre (aucun appel réseau). Voir la remarque "vrai NPC joueur"
-  ci-dessous : c'est la meilleure approximation possible sans plugin tiers (Citizens) ni paquets réseau bruts.
+  ce sont désormais des mobs immobiles (Zombie, IA/bruit/dégâts/combustion désactivés) habillés
+  d'une tête de joueur et d'une armure de cuir teintée à la couleur de l'équipe. Un clic n'importe
+  où sur le PNJ ouvre le bon menu, de façon garantie. Si un pseudo Minecraft est fourni, son skin
+  réel est récupéré de façon asynchrone (API Mojang via `PlayerProfile#update`) et appliqué à la
+  tête. Sans pseudo, la tête reste neutre (aucun appel réseau). C'est la meilleure approximation
+  d'un « vrai NPC joueur » sans plugin tiers (Citizens) ni paquets réseau bruts.
 - **Shop d'équipe** (`com.bedwars.shop`) : clic sur le Marchand ouvre un GUI avec des onglets en haut.
   Depuis la v3, le contenu (catégories/articles/prix) est entièrement configurable en jeu via
   `/bd shop ...` (voir "Nouveautés de cette itération (v3)" plus haut) — ce paragraphe historique
@@ -224,14 +225,46 @@ com.bedwars
 - 🛒 **Shop 100 % configurable en jeu** (`/bd shop ...`), sauvegardé dans `shop.yml`.
 - 🔧 **Améliorations d'équipe façon Hypixel** : Forge, Lames aiguisées, Armure renforcée, Mineur maniaque, Bassin de soin, Buff du dragon et 3 pièges.
 - 🧰 **Onglet Tools** : pioche & hache à 4 paliers (Bois → Fer → Or → Diamant), avec perte d'un palier à chaque mort.
-- 🎨 **PNJ Marchand/Amélioration** à apparence de joueur, armure teintée à l'équipe, skin asynchrone (sans dépendance externe).
+- 🎨 **PNJ Marchand/Amélioration** à apparence de joueur, armure teintée à l'équipe, skin asynchrone, clic 100 % fiable (sans dépendance externe).
 - 🪄 **Lobby flottant automatique** (cage BARRIER invisible) centré sur le point spectateur.
 - 🛡️ **Épée en bois protégée** (non jetable/échangeable) au slot 1 de la hotbar.
 - 🎨 **Couleurs d'équipe génériques** : recoloration automatique des blocs colorés.
 - 🖥️ **GUI d'admin paginé** + menu joueur avec codes couleur par statut.
 - 📊 **Scoreboard dynamique** et réinitialisation automatique de la map après chaque partie.
 
-## 🆕 Nouveautés de la version 1.0.9
+## 🆕 Nouveautés de la version 1.0.10
+
+Cette version refond les PNJ **Marchand** et **Amélioration** pour rendre l'ouverture des menus
+fiable à 100 %, quel que soit l'endroit exact où le joueur clique sur le PNJ.
+
+### 🧟 Des PNJ repensés : adieu les Armor Stands, bonjour les « vendeurs »
+- Les PNJ ne sont **plus des Armor Stands** mais des mobs immobiles (Zombies déguisés : IA,
+  dégâts, combustion au soleil, bruit et ramassage d'objets désactivés, aucun drop d'équipement),
+  habillés d'une tête de joueur et d'une armure en cuir teintée à la couleur de l'équipe.
+- Pourquoi ce changement ? Les Armor Stands utilisent un événement de clic séparé et
+  *positionnel* (`PlayerInteractAtEntityEvent`) dont la fiabilité dépend de l'endroit précis du
+  clic sur le corps du PNJ. Un mob classique déclenche toujours l'événement standard
+  `PlayerInteractEntityEvent` : **le menu s'ouvre à tous les coups**, où que l'on clique.
+
+### 🖱️ Clic PNJ corrigé (plus de double ouverture)
+- Le gestionnaire d'événement écoute désormais `PlayerInteractEntityEvent` et ignore la main
+  secondaire (`EquipmentSlot.HAND`), ce qui élimine le double déclenchement main/off-hand
+  qui pouvait ouvrir le menu deux fois.
+
+### 🧹 Purge anti-doublons élargie
+- Le nettoyage automatique des PNJ résiduels avant chaque spawn ne se limite plus aux Armor
+  Stands : tous les PNJ marqués par le tag interne du plugin sont purgés, quel que soit leur
+  type d'entité — les éventuels restes des anciennes versions sont nettoyés au passage.
+
+### ✅ Fiabilité & compilation
+- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
+- Le jar `BedwarsPlugin-1.0.10.jar` est compilé et prêt à l'emploi.
+
+### 🔄 Mise à jour
+- Numéro de version porté à **1.0.10** (`pom.xml` + `plugin.yml`).
+- README mis à jour (nouveautés 1.0.10).
+
+## 📜 Historique — version 1.0.9
 
 Cette version est avant tout une **version de fiabilisation** : elle élimine définitivement les PNJ
 « fantômes » qui se dupliquaient à chaque redémarrage du serveur, et corrige le comportement des
