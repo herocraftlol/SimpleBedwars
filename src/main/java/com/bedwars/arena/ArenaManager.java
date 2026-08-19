@@ -129,6 +129,11 @@ public class ArenaManager {
         arena.setMinPlayers(config.getInt("minPlayers", -1));
         arena.setSaved(config.getBoolean("saved", false));
         arena.setGameZoneConfirmed(config.getBoolean("gameZoneConfirmed", false));
+        // L'état runtime (WAITING/STARTING/PLAYING/...) n'a jamais été persisté : sans ça, une arène
+        // pourtant sauvegardée revenait par défaut à SETUP ("non configurée") à chaque redémarrage.
+        // Une arène rechargée ne peut être qu'au repos : WAITING si elle était complète et validée
+        // (/bd <nom> save), SETUP sinon (il manque encore de la configuration).
+        arena.setState(arena.isSaved() ? ArenaState.WAITING : ArenaState.SETUP);
 
         arena.setGamePos1(LocationUtil.load(config, "gamePos1"));
         arena.setGamePos2(LocationUtil.load(config, "gamePos2"));

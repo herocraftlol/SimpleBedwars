@@ -13,7 +13,7 @@ dragons.
 
 ## 📦 Installation
 
-1. Télécharge le fichier `BedwarsPlugin-1.0.8.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
+1. Télécharge le fichier `BedwarsPlugin-1.0.9.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
 2. Place le `.jar` dans le dossier `plugins/` de ton serveur Paper 1.21+.
 3. Redémarre le serveur.
 4. Configure tes arènes avec les commandes `/bd ...` (voir ci-dessous).
@@ -37,6 +37,7 @@ shade-plugin). Compilation vérifiée et réussie avec Maven + Paper 1.21.1 API 
 /bd copy <arène source> <nouveau nom>               (clone une arène, translatée à votre position)
 /bd shop <catégorie> <slot> <item> <quantité> <prix> <minerai>   (configure le contenu du Marchand)
 /bd arene gui                                        (affiche directement le GUI des arènes)
+/bd arene clean                                      (purge les PNJ marchand/amélioration fantômes)
 /bd join <nom>
 /bd leave
 /bd list
@@ -230,7 +231,45 @@ com.bedwars
 - 🖥️ **GUI d'admin paginé** + menu joueur avec codes couleur par statut.
 - 📊 **Scoreboard dynamique** et réinitialisation automatique de la map après chaque partie.
 
-## 🆕 Nouveautés de la version 1.0.8
+## 🆕 Nouveautés de la version 1.0.9
+
+Cette version est avant tout une **version de fiabilisation** : elle élimine définitivement les PNJ
+« fantômes » qui se dupliquaient à chaque redémarrage du serveur, et corrige le comportement des
+arènes après un reboot.
+
+### 🧹 Fin des PNJ fantômes (marchand & amélioration)
+- Les PNJ Marchand / Amélioration ne sont **plus persistés par le monde** (`setPersistent(false)`) :
+  c'est le plugin qui les fait réapparaître proprement à chaque démarrage. Avant, Minecraft les
+  sauvegardait aussi de son côté, ce qui créait un doublon supplémentaire à chaque redémarrage.
+- Chaque PNJ est désormais marqué d'un tag interne (`NamespacedKey`) : avant tout nouveau spawn,
+  le plugin charge le chunk concerné et **supprime automatiquement tout PNJ résiduel** trouvé à
+  proximité. Les doublons accumulés par les anciennes versions sont donc nettoyés une fois pour
+  toutes, sans intervention.
+
+### 🧼 Nouvelle commande `/bd arene clean`
+- Purge immédiatement tous les PNJ marchand/amélioration résiduels, puis les fait réapparaître
+  proprement pour toutes les arènes sauvegardées — pratique pour nettoyer un serveur **sans
+  redémarrer**. Réservée à la permission `bedwars.admin`.
+
+### 🗑️ Suppression définitive de l'ancien PNJ « hub »
+- Le vieux villageois cliquable (remplacé depuis un moment par `/bd arene gui`) est maintenant
+  **purgé automatiquement au démarrage**, et son fichier de sauvegarde est effacé pour que le
+  nettoyage n'ait lieu qu'une seule fois.
+
+### 🔄 État des arènes après redémarrage
+- Une arène complète et sauvegardée (`/bd <nom> save`) revient désormais à l'état **EN ATTENTE**
+  après un redémarrage, au lieu de repasser « non configurée » (SETUP) : vos arènes restent
+  jouables même après un reboot du serveur.
+
+### ✅ Fiabilité & compilation
+- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
+- Le jar `BedwarsPlugin-1.0.9.jar` est compilé et prêt à l'emploi.
+
+### 🔄 Mise à jour
+- Numéro de version porté à **1.0.9** (`pom.xml` + `plugin.yml`).
+- README mis à jour (commande `/bd arene clean`, nouveautés 1.0.9).
+
+## 📜 Historique — version 1.0.8
 
 ### 👥 Nombre de joueurs minimum (`/bd <nom> minplayers`)
 - **Nouvelle commande `/bd <nom> minplayers <nombre|off>`** : définit le seuil de joueurs à partir

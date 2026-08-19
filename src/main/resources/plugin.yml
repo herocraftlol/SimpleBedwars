@@ -1,6 +1,6 @@
 name: BedwarsPlugin
 main: com.bedwars.BedwarsPlugin
-version: 1.0.8
+version: 1.0.9
 api-version: '1.21'
 author: herocraftlol
 description: Plugin BedWars complet et configurable en jeu pour Paper 1.21+. Clonage d arenes (/bd copy), menu d arenes direct (/bd arene gui), shop configurable en jeu, ameliorations d equipe facon Hypixel, PNJ a skin de joueur, lobby flottant, pieges, mort subite avec dragons. Aucune dependance externe requise.

@@ -342,15 +342,41 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
 
     /** /bd arene gui : ouvre directement le GUI de sélection des arènes pour celui qui tape la commande. */
     private boolean handleArene(CommandSender sender, String[] args) {
+        if (args.length >= 2 && args[1].equalsIgnoreCase("clean")) {
+            return handleAreneClean(sender);
+        }
         if (!(sender instanceof Player player)) {
             sender.sendMessage(PREFIX + ChatColor.RED + "Cette action doit être exécutée en jeu.");
             return true;
         }
         if (args.length < 2 || !args[1].equalsIgnoreCase("gui")) {
-            sender.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd arene gui");
+            sender.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd arene gui" + ChatColor.DARK_GRAY
+                    + " (ou /bd arene clean pour purger les PNJ fantômes)");
             return true;
         }
         plugin.getAdminGUIManager().open(player);
+        return true;
+    }
+
+    /**
+     * /bd arene clean : supprime immédiatement tout PNJ marchand/amélioration résiduel
+     * (doublons laissés par d'anciens redémarrages) puis les fait proprement réapparaître.
+     * Le nettoyage se fait aussi automatiquement à chaque démarrage du plugin ; cette commande
+     * permet de le relancer à la demande sans redémarrer le serveur.
+     */
+    private boolean handleAreneClean(CommandSender sender) {
+        if (!sender.hasPermission("bedwars.admin")) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Vous n'avez pas la permission.");
+            return true;
+        }
+        plugin.getAdminNPCManager().purgeLegacyNpc();
+        int count = 0;
+        for (Arena arena : plugin.getArenaManager().getArenas().values()) {
+            if (!arena.isSaved()) continue;
+            plugin.getShopNpcManager().spawnForArena(arena);
+            count++;
+        }
+        sender.sendMessage(PREFIX + ChatColor.GREEN + "PNJ nettoyés et réaffichés pour " + count + " arène(s).");
         return true;
     }
 
@@ -581,6 +607,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "/bd copy <source> <nouveau nom>" + ChatColor.DARK_GRAY + " (clone une arène, translatée à votre position)");
         sender.sendMessage(ChatColor.GRAY + "/bd shop <catégorie> <slot> <item> <quantité> <prix> <minerai>");
         sender.sendMessage(ChatColor.GRAY + "/bd arene gui" + ChatColor.DARK_GRAY + " (affiche directement le GUI des arènes)");
+        sender.sendMessage(ChatColor.GRAY + "/bd arene clean" + ChatColor.DARK_GRAY + " (purge les PNJ marchand/amélioration fantômes)");
         sender.sendMessage(ChatColor.GRAY + "/bd join <nom>  |  /bd leave  |  /bd list");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> equipe <2/4/6/8> <joueurs>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> pos1 | pos2 | posconfirm");
@@ -601,7 +628,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
             options.addAll(plugin.getArenaManager().getArenas().keySet());
         } else if (args.length == 2) {
             if (args[0].equalsIgnoreCase("arene")) {
-                options.add("gui");
+                options.addAll(List.of("gui", "clean"));
             } else if (args[0].equalsIgnoreCase("join") || args[0].equalsIgnoreCase("delete")
                     || args[0].equalsIgnoreCase("copy")) {
                 options.addAll(plugin.getArenaManager().getArenas().keySet());

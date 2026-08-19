@@ -2,83 +2,85 @@ package com.bedwars.gui;
 
 import com.bedwars.BedwarsPlugin;
 import com.bedwars.util.LocationUtil;
-import org.bukkit.ChatColor;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Villager;
+import org.bukkit.entity.Entity;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.UUID;
 
 /**
- * Gère un unique NPC (un Villageois sans IA) qui, lorsqu'on clique dessus,
- * ouvre l'interface d'administration listant toutes les arènes.
- * Remarque : pour un vrai NPC "cosmétique" (skin custom, pas de nom de mob),
- * un plugin dédié type Citizens serait idéal ; ici on utilise un Villageois
- * figé (IA désactivée, invulnérable) ce qui fonctionne nativement avec l'API Paper.
+ * Ancien gestionnaire du PNJ "hub" (Villageois cliquable ouvrant le GUI des arènes).
+ * Cette fonctionnalité a été remplacée par la commande directe {@code /bd arene gui}
+ * (voir BedwarsCommand#handleArene) : il n'y a donc plus de commande pour placer un
+ * nouveau PNJ de ce type.
+ *
+ * Cette classe ne sert plus qu'à nettoyer, une fois pour toutes, les anciens PNJ hub
+ * encore présents dans le monde (ils étaient persistants dans les versions précédentes,
+ * donc toujours là après un redémarrage) : {@link #purgeLegacyNpc()} est appelée au
+ * démarrage du plugin, supprime tout PNJ hub résiduel trouvé à son ancien emplacement
+ * sauvegardé, puis efface définitivement ce fichier de sauvegarde pour que le nettoyage
+ * n'ait besoin de tourner qu'une seule fois.
  */
 public class AdminNPCManager {
+
+    private static NamespacedKey markerKey;
 
     private final BedwarsPlugin plugin;
     private final File file;
     private UUID npcId;
-    private Location npcLocation;
 
     public AdminNPCManager(BedwarsPlugin plugin) {
         this.plugin = plugin;
         this.file = new File(plugin.getDataFolder(), "npc.yml");
+        if (markerKey == null) {
+            markerKey = new NamespacedKey(plugin, "bedwars_hub_npc");
+        }
     }
 
-    public void spawnAt(Location location) {
-        removeNPC();
-        Villager villager = (Villager) location.getWorld().spawnEntity(location, EntityType.VILLAGER);
-        villager.setAI(false);
-        villager.setInvulnerable(true);
-        villager.setSilent(true);
-        villager.setCollidable(false);
-        villager.setCustomName(ChatColor.GOLD + "" + ChatColor.BOLD + "Admin Bedwars");
-        villager.setCustomNameVisible(true);
-        villager.setPersistent(true);
-        this.npcId = villager.getUniqueId();
-        this.npcLocation = location;
-        save();
-    }
-
+    /** Ne reconnaît plus aucun PNJ comme "hub" : la fonctionnalité a été retirée. */
     public boolean isNPC(UUID entityId) {
-        return npcId != null && npcId.equals(entityId);
+        return false;
     }
 
     public void removeNPC() {
-        if (npcId == null) return;
-        org.bukkit.entity.Entity e = org.bukkit.Bukkit.getEntity(npcId);
-        if (e != null) e.remove();
+        // Conservé pour compatibilité (appelé depuis onDisable) ; ne fait plus rien de spécifique
+        // puisque purgeLegacyNpc() a déjà tout nettoyé au démarrage.
     }
 
-    private void save() {
-        YamlConfiguration config = new YamlConfiguration();
-        if (npcId != null) config.set("uuid", npcId.toString());
-        LocationUtil.save(config, "location", npcLocation);
-        try {
-            config.save(file);
-        } catch (IOException e) {
-            plugin.getLogger().warning("Impossible de sauvegarder le NPC admin: " + e.getMessage());
-        }
-    }
-
-    public void load() {
+    /**
+     * Supprime définitivement tout ancien PNJ hub encore présent dans le monde (en chargeant
+     * son chunk pour être sûr de le trouver, même après un redémarrage), puis efface son fichier
+     * de sauvegarde. Idempotent : ne fait plus rien dès que le nettoyage a déjà eu lieu une fois.
+     */
+    public void purgeLegacyNpc() {
         if (!file.exists()) return;
+
         YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
-        String uuidStr = config.getString("uuid");
         Location loc = LocationUtil.load(config, "location");
-        if (uuidStr == null || loc == null) return;
-        this.npcId = UUID.fromString(uuidStr);
-        this.npcLocation = loc;
-        // Le NPC (entité Villageois) n'est pas persistant entre les redémarrages du monde
-        // s'il n'a pas été sauvegardé par le monde lui-même ; on le respawn pour être sûr.
-        if (org.bukkit.Bukkit.getEntity(npcId) == null) {
-            spawnAt(loc);
+        if (loc != null && loc.getWorld() != null) {
+            loc.getChunk().load();
+            for (Entity entity : loc.getWorld().getNearbyEntities(loc, 5, 5, 5)) {
+                if (isLegacyHubNpc(entity)) {
+                    entity.remove();
+                }
+            }
         }
+
+        if (!file.delete()) {
+            plugin.getLogger().warning("Impossible de supprimer l'ancien fichier npc.yml (PNJ hub obsolète).");
+        }
+    }
+
+    private boolean isLegacyHubNpc(Entity entity) {
+        // Marqué par notre tag (versions récentes) OU, à défaut, un Villageois figé nommé
+        // "Admin Bedwars" (versions plus anciennes, jamais tagué) : on couvre les deux cas.
+        Byte tagged = entity.getPersistentDataContainer().get(markerKey, PersistentDataType.BYTE);
+        if (tagged != null && tagged == (byte) 1) return true;
+        return entity.getType() == org.bukkit.entity.EntityType.VILLAGER
+                && entity.getCustomName() != null
+                && org.bukkit.ChatColor.stripColor(entity.getCustomName()).equals("Admin Bedwars");
     }
 }

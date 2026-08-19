@@ -8,11 +8,14 @@ import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
 import org.bukkit.inventory.meta.SkullMeta;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.profile.PlayerProfile;
 
 import java.util.ArrayList;
@@ -30,6 +33,12 @@ import java.util.UUID;
  * public de faire apparaître une vraie entité "Joueur" via l'API Bukkit/Paper. On utilise donc
  * un Armor Stand habillé d'une tête de joueur (skin réel si un pseudo est fourni, récupéré de
  * façon asynchrone via l'API Mojang) : silhouette et pose humaines, immobile, cliquable.
+ *
+ * Important (anti-duplication) : ces PNJ ne sont PLUS persistés par le monde (setPersistent(false))
+ * — le plugin les respawn lui-même à chaque démarrage (spawnAll()), donc Minecraft n'a pas besoin
+ * de les sauvegarder. Avant chaque spawn, on charge en plus le chunk concerné et on supprime tout
+ * PNJ résiduel marqué par notre tag trouvé à proximité, ce qui nettoie aussi définitivement les
+ * doublons déjà accumulés par d'anciennes versions (où ils étaient encore persistants).
  */
 public class ShopNpcManager {
 
@@ -37,11 +46,17 @@ public class ShopNpcManager {
 
     public record NpcInfo(String arenaName, TeamColor team, NpcType type) {}
 
+    private static NamespacedKey markerKey;
+
     private final BedwarsPlugin plugin;
     private final Map<UUID, NpcInfo> registry = new HashMap<>();
 
     public ShopNpcManager(BedwarsPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    public static void init(BedwarsPlugin plugin) {
+        markerKey = new NamespacedKey(plugin, "bedwars_shop_npc");
     }
 
     public NpcInfo getInfo(UUID entityId) {
@@ -64,10 +79,16 @@ public class ShopNpcManager {
 
     /** Fait apparaître (ou remplace) un PNJ précis. skinName est optionnel (pseudo dont copier le skin). */
     public void spawnOne(Arena arena, TeamColor color, NpcType type, Location location, String skinName) {
+        purgeStrayNpcsNear(location);
+
         ArmorStand stand = (ArmorStand) location.getWorld().spawnEntity(location, EntityType.ARMOR_STAND);
         stand.setInvulnerable(true);
         stand.setGravity(false);
-        stand.setPersistent(true);
+        // Ne JAMAIS rendre ces PNJ persistants : le plugin les respawn lui-même à chaque démarrage
+        // (spawnAll()) ; les laisser persistants est ce qui causait les doublons fantômes après
+        // chaque redémarrage (l'ancien restait dans le monde, un nouveau était recréé par-dessus).
+        stand.setPersistent(false);
+        stand.getPersistentDataContainer().set(markerKey, PersistentDataType.BYTE, (byte) 1);
         stand.setArms(true);
         stand.setBasePlate(false);
         stand.setSmall(false);
@@ -94,6 +115,26 @@ public class ShopNpcManager {
         }
 
         registry.put(stand.getUniqueId(), new NpcInfo(arena.getName(), color, type));
+    }
+
+    /**
+     * Charge le chunk de cet emplacement et supprime tout PNJ marchand/amélioration résiduel
+     * trouvé à proximité (doublons d'anciennes sessions, ou re-configuration au même endroit).
+     */
+    private void purgeStrayNpcsNear(Location location) {
+        location.getChunk().load();
+        for (Entity entity : location.getWorld().getNearbyEntities(location, 3, 3, 3)) {
+            if (entity instanceof ArmorStand && isOurNpc(entity)) {
+                registry.remove(entity.getUniqueId());
+                entity.remove();
+            }
+        }
+    }
+
+    private boolean isOurNpc(Entity entity) {
+        if (markerKey == null) return false;
+        Byte value = entity.getPersistentDataContainer().get(markerKey, PersistentDataType.BYTE);
+        return value != null && value == (byte) 1;
     }
 
     private void applySkinAsync(ArmorStand stand, String skinName) {
@@ -124,7 +165,7 @@ public class ShopNpcManager {
         return item;
     }
 
-    /** Supprime tous les PNJ (shop + amélioration) d'une arène donnée. */
+    /** Supprime tous les PNJ (shop + amélioration) d'une arène donnée, y compris les doublons résiduels. */
     public void removeForArena(Arena arena) {
         List<UUID> toRemove = new ArrayList<>();
         for (Map.Entry<UUID, NpcInfo> entry : registry.entrySet()) {
@@ -133,9 +174,15 @@ public class ShopNpcManager {
             }
         }
         for (UUID id : toRemove) {
-            org.bukkit.entity.Entity entity = Bukkit.getEntity(id);
+            Entity entity = Bukkit.getEntity(id);
             if (entity != null) entity.remove();
             registry.remove(id);
+        }
+        // Filet de sécurité : purge aussi tout PNJ résiduel non suivi par le registre (doublons
+        // d'anciennes sessions), en se basant sur les emplacements connus de cette arène.
+        for (ArenaTeam team : arena.getTeams().values()) {
+            if (team.getShopLocation() != null) purgeStrayNpcsNear(team.getShopLocation());
+            if (team.getUpgradeLocation() != null) purgeStrayNpcsNear(team.getUpgradeLocation());
         }
     }
 
@@ -150,7 +197,7 @@ public class ShopNpcManager {
 
     public void removeAll() {
         for (UUID id : new ArrayList<>(registry.keySet())) {
-            org.bukkit.entity.Entity entity = Bukkit.getEntity(id);
+            Entity entity = Bukkit.getEntity(id);
             if (entity != null) entity.remove();
         }
         registry.clear();

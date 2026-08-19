@@ -42,6 +42,7 @@ public class BedwarsPlugin extends JavaPlugin {
         saveDefaultConfig();
         KitProtectionUtil.init(this);
         com.bedwars.util.LobbyItemUtil.init(this);
+        ShopNpcManager.init(this);
 
         this.arenaManager = new ArenaManager(this);
         this.scoreboardManager = new ScoreboardManager();
@@ -55,7 +56,9 @@ public class BedwarsPlugin extends JavaPlugin {
         this.upgradeGUIManager = new UpgradeGUIManager(this);
 
         arenaManager.loadAll();
-        adminNPCManager.load();
+        // Nettoyage définitif de l'ancien PNJ hub (fonctionnalité remplacée par /bd arene gui) :
+        // supprime tout PNJ résiduel encore présent dans le monde, une fois pour toutes.
+        adminNPCManager.purgeLegacyNpc();
         shopConfigManager.load();
         shopNpcManager.spawnAll();
 
