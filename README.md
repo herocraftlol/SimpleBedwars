@@ -13,7 +13,7 @@ dragons.
 
 ## 📦 Installation
 
-1. Télécharge le fichier `BedwarsPlugin-1.0.10.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
+1. Télécharge le fichier `BedwarsPlugin-1.0.11.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
 2. Place le `.jar` dans le dossier `plugins/` de ton serveur Paper 1.21+.
 3. Redémarre le serveur.
 4. Configure tes arènes avec les commandes `/bd ...` (voir ci-dessous).
@@ -232,7 +232,36 @@ com.bedwars
 - 🖥️ **GUI d'admin paginé** + menu joueur avec codes couleur par statut.
 - 📊 **Scoreboard dynamique** et réinitialisation automatique de la map après chaque partie.
 
-## 🆕 Nouveautés de la version 1.0.10
+## 🆕 Nouveautés de la version 1.0.11
+
+Version de **fiabilisation technique** : la récupération des skins des PNJ est consolidée et la
+compilation est de nouveau vérifiée de bout en bout. Aucun changement de gameplay — vos arènes,
+shops et améliorations se comportent exactement comme en 1.0.10.
+
+### 🎭 Skins de PNJ fiabilisés
+- La récupération du skin d'un PNJ (quand un pseudo est fourni via
+  `/bd <nom> shop <shop|upgrade> color <couleur> [pseudo]`) utilise désormais
+  `PlayerProfile#complete(true)` de l'API Paper au lieu de `update().join()` : le profil est
+  complété **synchronement avec ses textures**, de façon plus directe et sans dépendre d'une
+  méthode appelée à disparaître de l'API.
+- Le code s'appuie explicitement sur l'interface Paper `com.destroystokyo.paper.profile.PlayerProfile`
+  (le plugin cible Paper de toute façon) — plus d'ambiguïté avec l'interface Bukkit générique.
+
+### 🧩 Import `LeatherArmorMeta` vérifié
+- L'armure en cuir teintée à la couleur de l'équipe repose sur
+  `org.bukkit.inventory.meta.LeatherArmorMeta`, emplacement **confirmé comme le seul valide**
+  dans l'API Paper 1.21 (vérifié directement dans le jar officiel, jusqu'aux builds les plus
+  récents).
+
+### ✅ Compilation
+- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
+- Le jar `BedwarsPlugin-1.0.11.jar` est compilé et prêt à l'emploi.
+
+### 🔄 Mise à jour
+- Numéro de version porté à **1.0.11** (`pom.xml` + `plugin.yml`).
+- README mis à jour (nouveautés 1.0.11).
+
+## 📜 Historique — version 1.0.10
 
 Cette version refond les PNJ **Marchand** et **Amélioration** pour rendre l'ouverture des menus
 fiable à 100 %, quel que soit l'endroit exact où le joueur clique sur le PNJ.
