@@ -13,7 +13,7 @@ dragons.
 
 ## 📦 Installation
 
-1. Télécharge le fichier `BedwarsPlugin-1.0.12.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
+1. Télécharge le fichier `BedwarsPlugin-1.0.13.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
 2. Place le `.jar` dans le dossier `plugins/` de ton serveur Paper 1.21+.
 3. Redémarre le serveur.
 4. Configure tes arènes avec les commandes `/bd ...` (voir ci-dessous).
@@ -46,8 +46,8 @@ shade-plugin). Compilation vérifiée et réussie avec Maven + Paper 1.21.1 API 
 /bd <nom> pos1 | pos2 | posconfirm
 /bd <nom> bed <couleur>
 /bd <nom> spawn <couleur>
-/bd <nom> item <fer|or|diamand|emeraude>
-/bd <nom> forge <couleur>                            (point d'apparition des bonus Forge diamant/émeraude)
+/bd <nom> item <diamand|emeraude>                    (générateurs communs de la map)
+/bd <nom> forge <couleur>                            (crée la forge de l'équipe : générateurs fer+or + bonus Forge)
 /bd <nom> shop <shop|upgrade> color <couleur> [pseudo]   (pseudo optionnel = skin du PNJ)
 /bd <nom> spec                                       (= aussi le centre du lobby d'attente flottant)
 /bd <nom> minplayers <nombre|off>                    (seuil pour lancer le compte à rebours)
@@ -234,7 +234,36 @@ com.bedwars
 - 🖥️ **GUI d'admin paginé** + menu joueur avec codes couleur par statut.
 - 📊 **Scoreboard dynamique** et réinitialisation automatique de la map après chaque partie.
 
-## 🆕 Nouveautés de la version 1.0.12
+## 🆕 Nouveautés de la version 1.0.13
+
+Itération de **simplification de la configuration** : la forge d'équipe et ses générateurs de
+fer/or ne font désormais plus qu'un, et la validation d'arène s'adapte en conséquence.
+
+### ⛏️ `/bd <nom> forge <couleur>` : une seule commande pour toute la forge
+- La commande crée désormais **directement les générateurs de fer et d'or de l'équipe** à
+  l'emplacement choisi — plus besoin de les ajouter séparément. Ce sont ces générateurs qui
+  sont accélérés par l'amélioration d'équipe **Forge**, et c'est aussi ici qu'apparaissent les
+  bonus **diamant (palier 3) / émeraude (palier 4)**.
+- **Replaçable à volonté sans doublon** : relancer la commande pour une équipe supprime
+  automatiquement ses anciens générateurs fer/or avant d'en recréer de nouveaux.
+
+### 🧹 `/bd item` recentré sur les générateurs communs
+- `/bd <nom> item` n'accepte plus que **`diamand` et `emeraude`** (les générateurs communs de
+  la map) ; le fer et l'or d'une équipe passent exclusivement par `/bd <nom> forge <couleur>`.
+- L'auto-complétion et le message d'aide (`/bd`) ont été mis à jour en conséquence.
+
+### ✅ Validation d'arène adaptée
+- La vérification de complétude d'une arène exige désormais un **point de forge par équipe**
+  (avec un message d'aide indiquant la commande exacte à lancer) au lieu des anciens
+  générateurs fer/or libres, qui n'ont plus lieu d'être.
+- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
+- Le jar `BedwarsPlugin-1.0.13.jar` est compilé et prêt à l'emploi.
+
+### 🔄 Mise à jour
+- Numéro de version porté à **1.0.13** (`pom.xml` + `plugin.yml`).
+- README mis à jour (nouveautés 1.0.13, liste des commandes).
+
+## 📜 Historique — version 1.0.12
 
 Grosse itération **gameplay** : le kit de base s'enrichit, l'épée devient améliorable, la Forge
 produit désormais du diamant et de l'émeraude, et le Dragon Buff est repensé. À noter : les

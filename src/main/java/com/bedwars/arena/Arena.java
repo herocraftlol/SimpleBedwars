@@ -180,15 +180,14 @@ public class Arena {
                 if (team == null || team.getUpgradeLocation() == null) {
                     missing.add("upgrade équipe " + color.getColoredName());
                 }
+                if (team == null || team.getForgeLocation() == null) {
+                    missing.add("forge équipe " + color.getColoredName() + " (/bd " + name + " forge " + color.getDisplayName() + ")");
+                }
             }
         }
 
-        boolean hasIron = generators.stream().anyMatch(g -> g.getType() == GeneratorType.FER);
-        boolean hasGold = generators.stream().anyMatch(g -> g.getType() == GeneratorType.OR);
         boolean hasDiamond = generators.stream().anyMatch(g -> g.getType() == GeneratorType.DIAMOND);
         boolean hasEmerald = generators.stream().anyMatch(g -> g.getType() == GeneratorType.EMERAUDE);
-        if (!hasIron) missing.add("au moins un générateur de fer");
-        if (!hasGold) missing.add("au moins un générateur d'or");
         if (!hasDiamond) missing.add("au moins un générateur de diamant");
         if (!hasEmerald) missing.add("au moins un générateur d'émeraude");
 

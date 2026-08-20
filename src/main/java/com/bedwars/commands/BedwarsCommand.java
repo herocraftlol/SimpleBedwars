@@ -531,34 +531,26 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
 
     private void handleItem(Player player, Arena arena, String[] args) {
         if (args.length < 3) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd " + arena.getName()
-                    + " item <fer|or|diamand|emeraude> [couleur d'équipe]");
+            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd " + arena.getName() + " item <diamand|emeraude>");
             return;
         }
         GeneratorType type = GeneratorType.fromInput(args[2]);
-        if (type == null) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Type de minerai inconnu. Utilisez: fer, or, diamand, emeraude.");
+        if (type == null || type == GeneratorType.FER || type == GeneratorType.OR) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Type de minerai inconnu. Utilisez: diamand, emeraude."
+                    + ChatColor.GRAY + " (le fer et l'or d'une équipe se configurent désormais via /bd " + arena.getName() + " forge <couleur>)");
             return;
         }
         Generator generator = new Generator(type, player.getLocation());
-
-        if (args.length >= 4) {
-            TeamColor color = resolveColor(player, arena, args[3]);
-            if (color == null) return;
-            generator.setTeam(color);
-        }
-
         arena.getGenerators().add(generator);
-        String teamSuffix = generator.getTeam() != null
-                ? " (générateur de base de l'équipe " + generator.getTeam().getColoredName() + ChatColor.GREEN + ", accéléré par la Forge)"
-                : "";
-        player.sendMessage(PREFIX + ChatColor.GREEN + "Générateur de " + args[2] + " ajouté à " + arena.getName() + teamSuffix + ".");
+        player.sendMessage(PREFIX + ChatColor.GREEN + "Générateur de " + args[2] + " ajouté à " + arena.getName() + ".");
     }
 
     /**
-     * /bd <nom> forge <couleur> : définit le point d'ancrage de la "forge de base" d'une équipe.
-     * À partir du palier 3 de l'amélioration Forge, du diamant (puis de l'émeraude au palier 4)
-     * apparaît directement à cet endroit, en plus de l'accélération du fer/or (voir GameInstance).
+     * /bd <nom> forge <couleur> : définit le point d'ancrage de la "forge de base" d'une équipe,
+     * et crée directement à cet endroit ses générateurs de fer et d'or (remplace les anciens
+     * /bd <nom> item fer/or <couleur>, qui ne gère plus que diamant/émeraude). À partir du
+     * palier 3 de l'amélioration Forge, du diamant (puis de l'émeraude au palier 4) apparaît
+     * aussi directement ici, en plus de l'accélération du fer/or (voir GameInstance).
      */
     private void handleForge(Player player, Arena arena, String[] args) {
         if (args.length < 3) {
@@ -568,10 +560,23 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         TeamColor color = resolveColor(player, arena, args[2]);
         if (color == null) return;
         ArenaTeam team = arena.getOrCreateTeam(color);
-        team.setForgeLocation(player.getLocation());
+
+        // Si une forge existait déjà pour cette équipe, on retire ses anciens générateurs fer/or
+        // avant d'en recréer de nouveaux au nouvel emplacement (évite les doublons).
+        arena.getGenerators().removeIf(g -> g.getTeam() == color && (g.getType() == GeneratorType.FER || g.getType() == GeneratorType.OR));
+
+        Location loc = player.getLocation();
+        team.setForgeLocation(loc);
+
+        Generator iron = new Generator(GeneratorType.FER, loc);
+        iron.setTeam(color);
+        Generator gold = new Generator(GeneratorType.OR, loc);
+        gold.setTeam(color);
+        arena.getGenerators().add(iron);
+        arena.getGenerators().add(gold);
+
         player.sendMessage(PREFIX + ChatColor.GREEN + "Forge de base définie pour l'équipe " + color.getColoredName()
-                + ChatColor.GREEN + ". Pensez à assigner ses générateurs de fer/or à cette équipe : /bd "
-                + arena.getName() + " item fer " + color.getDisplayName());
+                + ChatColor.GREEN + " (générateurs de fer et d'or créés ici, accélérés par l'amélioration Forge).");
     }
 
     private void handleShop(Player player, Arena arena, String[] args) {
@@ -678,8 +683,8 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> pos1 | pos2 | posconfirm");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> bed <couleur>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> spawn <couleur>");
-        sender.sendMessage(ChatColor.GRAY + "/bd <nom> item <fer|or|diamand|emeraude> [couleur d'équipe]");
-        sender.sendMessage(ChatColor.GRAY + "/bd <nom> forge <couleur>" + ChatColor.DARK_GRAY + " (ancre de la forge de base d'une équipe)");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> item <diamand|emeraude>" + ChatColor.DARK_GRAY + " (générateurs communs de la map)");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> forge <couleur>" + ChatColor.DARK_GRAY + " (crée fer+or de l'équipe, accélérés par l'amélioration Forge)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> shop <shop|upgrade> color <couleur> [pseudo]");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> spec " + ChatColor.DARK_GRAY + "(= centre du lobby d'attente flottant)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> minplayers <nombre|off>" + ChatColor.DARK_GRAY + " (seuil pour lancer le compte à rebours)");
@@ -715,14 +720,12 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
             if (arena != null) {
                 switch (args[1].toLowerCase()) {
                     case "bed", "spawn", "forge" -> options.addAll(colorNames());
-                    case "item" -> options.addAll(List.of("fer", "or", "diamand", "emeraude"));
+                    case "item" -> options.addAll(List.of("diamand", "emeraude"));
                     case "shop" -> options.addAll(List.of("shop", "upgrade"));
                 }
             }
         } else if (args.length == 4 && args[1].equalsIgnoreCase("shop")) {
             options.add("color");
-        } else if (args.length == 4 && args[1].equalsIgnoreCase("item")) {
-            options.addAll(colorNames());
         } else if (args.length == 5 && args[1].equalsIgnoreCase("shop")) {
             options.addAll(colorNames());
         }
