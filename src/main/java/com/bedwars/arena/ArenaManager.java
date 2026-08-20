@@ -80,6 +80,7 @@ public class ArenaManager {
         LocationUtil.save(config, "gamePos1", arena.getGamePos1());
         LocationUtil.save(config, "gamePos2", arena.getGamePos2());
         LocationUtil.save(config, "spec", arena.getSpecLocation());
+        LocationUtil.save(config, "spectatorSpawn", arena.getSpectatorSpawnLocation());
 
         for (TeamColor color : TeamColor.values()) {
             ArenaTeam team = arena.getTeams().get(color);
@@ -139,6 +140,7 @@ public class ArenaManager {
         arena.setGamePos1(LocationUtil.load(config, "gamePos1"));
         arena.setGamePos2(LocationUtil.load(config, "gamePos2"));
         arena.setSpecLocation(LocationUtil.load(config, "spec"));
+        arena.setSpectatorSpawnLocation(LocationUtil.load(config, "spectatorSpawn"));
 
         if (config.isConfigurationSection("teams")) {
             for (String key : Objects.requireNonNull(config.getConfigurationSection("teams")).getKeys(false)) {
@@ -237,6 +239,7 @@ public class ArenaManager {
         target.setGamePos2(translate(source.getGamePos2(), dx, dy, dz, newWorld));
         target.setGameZoneConfirmed(source.isGameZoneConfirmed());
         target.setSpecLocation(translate(source.getSpecLocation(), dx, dy, dz, newWorld));
+        target.setSpectatorSpawnLocation(translate(source.getSpectatorSpawnLocation(), dx, dy, dz, newWorld));
 
         for (Map.Entry<TeamColor, ArenaTeam> entry : source.getTeams().entrySet()) {
             ArenaTeam srcTeam = entry.getValue();

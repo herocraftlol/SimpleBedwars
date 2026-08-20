@@ -50,9 +50,18 @@ public class ShopListener implements Listener {
                 || topInventory.getHolder() instanceof UpgradeGUIManager.TrapPickHolder;
         if (!isShop && !isUpgrade) return;
 
-        event.setCancelled(true);
-        if (event.getClickedInventory() == null || !event.getClickedInventory().equals(topInventory)) return;
+        boolean clickedTop = event.getClickedInventory() != null && event.getClickedInventory().equals(topInventory);
+        if (!clickedTop) {
+            // Clic dans l'inventaire du joueur (pas dans le shop) : autorisé, pour pouvoir
+            // réorganiser son inventaire pendant qu'on fait ses achats. Seul un shift-click est
+            // bloqué, car il essaierait d'envoyer l'item directement dans le GUI du shop.
+            if (event.getClick().isShiftClick()) {
+                event.setCancelled(true);
+            }
+            return;
+        }
 
+        event.setCancelled(true);
         int slot = event.getRawSlot();
 
         if (isShop) {

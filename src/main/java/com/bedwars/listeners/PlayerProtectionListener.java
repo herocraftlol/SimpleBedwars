@@ -31,17 +31,31 @@ public class PlayerProtectionListener implements Listener {
     @EventHandler
     public void onMove(PlayerMoveEvent event) {
         Player player = event.getPlayer();
-        if (player.getGameMode() != GameMode.SPECTATOR) return;
         GameInstance game = plugin.getGameManager().findInstanceOf(player);
         if (game == null) return;
         Arena arena = game.getArena();
-        if (arena.getSpecLocation() == null) return;
 
-        Location to = event.getTo();
-        if (to == null) return;
-        if (!plugin.getWaitingLobbyManager().isWithin(arena, to) && !isNear(to, arena.getSpecLocation(), 60)) {
-            // Le spectateur essaie de sortir trop loin de la zone prévue : on le replace.
-            event.setTo(arena.getSpecLocation());
+        if (player.getGameMode() == GameMode.SPECTATOR) {
+            Location center = arena.getSpectatorSpawnLocation() != null
+                    ? arena.getSpectatorSpawnLocation() : arena.getSpecLocation();
+            if (center == null) return;
+
+            Location to = event.getTo();
+            if (to == null) return;
+            if (!plugin.getWaitingLobbyManager().isWithin(arena, to) && !isNear(to, center, 60)) {
+                // Le spectateur essaie de sortir trop loin de la zone prévue : on le replace.
+                event.setTo(center);
+            }
+            return;
+        }
+
+        // Joueur vivant en partie : mort instantanée dès qu'il sort de la zone de jeu par en
+        // dessous (pas besoin d'attendre qu'il tombe jusque dans le vide du monde).
+        if (game.isAlivePlaying(player) && arena.getGamePos1() != null && arena.getGamePos2() != null) {
+            double minY = Math.min(arena.getGamePos1().getY(), arena.getGamePos2().getY());
+            if (player.getLocation().getY() < minY - 1) {
+                player.setHealth(0.0);
+            }
         }
     }
 

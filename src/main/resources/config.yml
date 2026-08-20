@@ -1,7 +1,7 @@
 # Configuration du plugin BedwarsPlugin
 
 game:
-  countdown-lobby-seconds: 10
+  countdown-lobby-seconds: 30
   game-duration-minutes: 45
   sudden-death-dragon-height-above-bed: 20
   end-reset-delay-seconds: 10

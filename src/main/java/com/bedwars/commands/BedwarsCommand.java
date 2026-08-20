@@ -118,6 +118,11 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
                 arena.setSpecLocation(player.getLocation());
                 player.sendMessage(PREFIX + "Centre du lobby d'attente / spawn spectateurs défini pour " + arena.getName() + ".");
             }
+            case "specspawn" -> {
+                arena.setSpectatorSpawnLocation(player.getLocation());
+                player.sendMessage(PREFIX + "Point de spawn des spectateurs (généralement le milieu de la map) défini pour "
+                        + arena.getName() + ". Les joueurs éliminés définitivement y seront téléportés.");
+            }
             case "minplayers" -> handleMinPlayers(player, arena, args);
             case "save" -> handleSave(player, arena);
             case "config", "edit" -> {
@@ -512,8 +517,18 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         }
         TeamColor color = resolveColor(player, arena, args[2]);
         if (color == null) return;
+
+        // Important : on capture le bloc du LIT visé (raytrace), pas la position du joueur qui
+        // tape la commande — sinon la casse de lit ne fonctionne jamais en jeu (le bloc cassé ne
+        // correspond à aucune position enregistrée, donc il est traité comme un bloc protégé normal).
+        org.bukkit.block.Block target = player.getTargetBlockExact(10);
+        if (target == null || !com.bedwars.util.BedUtil.isBedBlock(target.getType())) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Regardez directement le lit (bloc, à moins de 10 blocs) avant de taper cette commande.");
+            return;
+        }
+
         ArenaTeam team = arena.getOrCreateTeam(color);
-        team.setBedLocation(player.getLocation());
+        team.setBedLocation(target.getLocation());
         player.sendMessage(PREFIX + ChatColor.GREEN + "Lit de l'équipe " + color.getColoredName()
                 + ChatColor.GREEN + " défini.");
     }
@@ -725,6 +740,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> reset" + ChatColor.DARK_GRAY + " (réinitialise immédiatement une arène, même en pleine partie)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> shop <shop|upgrade> color <couleur> [pseudo]");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> spec " + ChatColor.DARK_GRAY + "(= centre du lobby d'attente flottant)");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> specspawn" + ChatColor.DARK_GRAY + " (spawn spectateurs pendant la partie, ex: milieu de la map)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> minplayers <nombre|off>" + ChatColor.DARK_GRAY + " (seuil pour lancer le compte à rebours)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> save  |  /bd <nom> edit" + ChatColor.DARK_GRAY + " (= config, réactive la modification libre de la map)");
     }
@@ -746,7 +762,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
                 options.addAll(List.of("blocks", "melee", "armor", "ranged", "potions", "utility"));
             } else if (plugin.getArenaManager().getArena(args[0]) != null) {
                 options.addAll(List.of("equipe", "pos1", "pos2", "posconfirm", "bed", "spawn",
-                        "item", "forge", "geninfo", "reset", "shop", "spec", "minplayers", "save", "edit", "config"));
+                        "item", "forge", "geninfo", "reset", "shop", "spec", "specspawn", "minplayers", "save", "edit", "config"));
             }
         } else if (args.length == 7 && args[0].equalsIgnoreCase("shop")) {
             options.addAll(List.of("fer", "or", "diamand", "emeraude"));

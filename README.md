@@ -13,7 +13,7 @@ dragons.
 
 ## 📦 Installation
 
-1. Télécharge le fichier `BedwarsPlugin-1.0.14.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
+1. Télécharge le fichier `BedwarsPlugin-1.0.15.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
 2. Place le `.jar` dans le dossier `plugins/` de ton serveur Paper 1.21+.
 3. Redémarre le serveur.
 4. Configure tes arènes avec les commandes `/bd ...` (voir ci-dessous).
@@ -52,6 +52,7 @@ shade-plugin). Compilation vérifiée et réussie avec Maven + Paper 1.21.1 API 
 /bd <nom> reset                                       (réinitialise immédiatement l'arène, même en pleine partie)
 /bd <nom> shop <shop|upgrade> color <couleur> [pseudo]   (pseudo optionnel = skin du PNJ)
 /bd <nom> spec                                       (= aussi le centre du lobby d'attente flottant)
+/bd <nom> specspawn                                  (spawn spectateurs pendant la partie, ex: milieu de la map)
 /bd <nom> minplayers <nombre|off>                    (seuil pour lancer le compte à rebours)
 /bd <nom> save
 /bd <nom> config   (alias : edit — repasse l'arène en mode édition libre de la map)
@@ -238,7 +239,67 @@ com.bedwars
 - ♻️ **Réinitialisation d'arène à la demande** (`/bd <nom> reset`), même en pleine partie.
 - 🏆 **Victoire automatique** dès qu'il ne reste plus qu'une seule équipe en jeu.
 
-## 🆕 Nouveautés de la version 1.0.14
+## 🆕 Nouveautés de la version 1.0.15
+
+Itération **confort des joueurs & nettoyage de fin de partie** : les joueurs sont renvoyés là où
+ils étaient avant d'avoir rejoint, les dragons de mort subite ne traînent plus entre deux parties,
+et plusieurs détails de gameplay deviennent plus justes et plus agréables.
+
+### 🏠 Retour à la position d'origine en fin de partie
+- La position de chaque joueur est mémorisée lors de son `/bd join` ; à la fin de la partie, lors
+  d'un `/bd leave`, du bouton « Quitter » du lobby ou d'un `/bd reset`, chacun est téléporté
+  **là où il se trouvait avant d'avoir rejoint** (et plus au spawn du monde). Repli vers le spawn
+  du monde si aucune position n'est connue.
+
+### 👁️ Nouvelle commande `/bd <nom> specspawn`
+- Définit un **point de spawn dédié pour les spectateurs éliminés définitivement** pendant la
+  partie — typiquement le milieu de la map — d'où ils pourront observer le jeu sans gêner les
+  joueurs encore vivants. Si non défini, on retombe sur le point `spec` (centre du lobby
+  d'attente). Sauvegardé dans la config de l'arène, recopié par `/bd copy`, et pris en compte
+  par la protection de déplacement des spectateurs.
+
+### 🛏️ `/bd <nom> bed <couleur>` enfin fiable
+- Le lit enregistré est désormais celui **visé directement** (raytrace jusqu'à 10 blocs), et plus
+  la position du joueur qui tape la commande — sinon aucun lit cassé en jeu ne correspondait à
+  une position enregistrée, et le bloc était traité comme un bloc protégé ordinaire. Un message
+  d'aide s'affiche si aucun lit n'est visé.
+
+### 🐉 Dragons de mort subite nettoyés entre les parties
+- Les dragons et leur boucle de ciblage sont **explicitement supprimés en fin de partie**, et une
+  sécurité supplémentaire les nettoie aussi **avant le lancement** de chaque nouvelle partie :
+  plus jamais de dragons résiduels traînant sur la map.
+
+### ⚖️ Répartition d'équipes plus juste
+- Le point de départ du tour de répartition des joueurs sans préférence est **randomisé** : si le
+  nombre de joueurs est impair, quelle équipe récupère le joueur « en trop » est tiré au hasard
+  (et plus toujours la première équipe de la liste).
+
+### 🎒 Shop : on peut réorganiser son inventaire pendant ses achats
+- Les clics dans **l'inventaire du joueur** pendant que le shop (ou le menu des pièges) est ouvert
+  sont désormais autorisés ; seul le shift-click, qui pousserait l'item dans le GUI, est bloqué.
+
+### 💥 Sortir de la zone par le bas = mort instantanée
+- Un joueur vivant qui passe sous la zone de jeu (pos1/pos2) par **en dessous** est éliminé
+  immédiatement — plus besoin d'attendre de tomber dans le vide du monde.
+
+### ⛏️ Bonus de forge dispersés
+- Les diamants/émeraudes de l'amélioration **Forge**, ainsi que les items des générateurs de forge
+  lorsqu'aucun joueur n'est à proximité, tombent désormais **dispersés dans une zone de 3x3 blocs**
+  autour de l'ancre, au lieu d'un unique point fixe.
+
+### ⏱️ Compte à rebours du lobby plus confortable
+- La durée par défaut passe de **10 à 30 secondes** (`game.countdown-lobby-seconds` dans
+  `config.yml` — supprime ton ancien fichier pour que la nouvelle valeur s'applique).
+
+### ✅ Compilation
+- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
+- Le jar `BedwarsPlugin-1.0.15.jar` est compilé et prêt à l'emploi.
+
+### 🔄 Mise à jour
+- Numéro de version porté à **1.0.15** (`pom.xml` + `plugin.yml`).
+- README mis à jour (nouveautés 1.0.15, liste des commandes).
+
+## 📜 Historique — version 1.0.14
 
 Itération **qualité de vie & fiabilité** : quitter une partie fait maintenant vraiment quitter la
 partie, une arène peut être réinitialisée à tout moment, et la victoire est détectée

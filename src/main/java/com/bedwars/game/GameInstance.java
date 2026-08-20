@@ -48,6 +48,8 @@ public class GameInstance {
     private BukkitTask forgeBonusTask;
     private final Map<TeamColor, Long> forgeDiamondCounter = new EnumMap<>(TeamColor.class);
     private final Map<TeamColor, Long> forgeEmeraldCounter = new EnumMap<>(TeamColor.class);
+    private final List<EnderDragon> spawnedDragons = new ArrayList<>();
+    private BukkitTask dragonTargetingTask;
     private BukkitTask scoreboardTask;
     private BukkitTask upgradeEffectsTask;
 
@@ -201,7 +203,7 @@ public class GameInstance {
 
     private void startCountdown() {
         arena.setState(ArenaState.STARTING);
-        lobbyCountdown = plugin.getConfig().getInt("game.countdown-lobby-seconds", 10);
+        lobbyCountdown = plugin.getConfig().getInt("game.countdown-lobby-seconds", 30);
         lobbyCountdownTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (lobbyCountdown <= 0) {
                 lobbyCountdownTask.cancel();
@@ -228,6 +230,9 @@ public class GameInstance {
     private void startGame() {
         arena.setState(ArenaState.PLAYING);
         plugin.getWaitingLobbyManager().destroy(arena);
+        // Sécurité : supprime tout dragon qui traînerait encore d'une partie précédente non
+        // terminée proprement, avant même que la nouvelle partie ne commence.
+        killAllDragons();
         // Sécurité supplémentaire : les améliorations d'équipe repartent toujours de zéro à
         // chaque lancement (elles le sont déjà de fait, chaque partie utilisant une instance
         // fraîche, mais on le garantit explicitement ici).
@@ -283,7 +288,10 @@ public class GameInstance {
             }
         }
         // Puis on répartit le reste équitablement entre les équipes qui ont encore de la place.
-        int index = 0;
+        // Le point de départ du tour est randomisé : si le nombre de joueurs est impair, quelle
+        // équipe récupère le joueur "en trop" est donc aussi déterminé au hasard (pas toujours
+        // la première équipe de la liste).
+        int index = colors.length > 0 ? new java.util.Random().nextInt(colors.length) : 0;
         for (UUID uuid : remaining) {
             TeamColor chosen = null;
             for (int i = 0; i < colors.length; i++) {
@@ -613,8 +621,17 @@ public class GameInstance {
         return forgeLevel >= 4 ? 120 : 0;
     }
 
+    /** Les items de la forge apparaissent dispersés dans une zone de 3x3 blocs autour de l'ancre. */
     private void dropForgeBonus(Location loc, Material material) {
-        loc.getWorld().dropItem(loc.clone().add(0.5, 0.2, 0.5), new ItemStack(material, 1));
+        loc.getWorld().dropItem(randomizeWithinZone(loc, 3), new ItemStack(material, 1));
+    }
+
+    /** Retourne un point aléatoire dans une zone carrée de {@code size} blocs de côté, centrée sur loc. */
+    private Location randomizeWithinZone(Location loc, int size) {
+        double half = (size - 1) / 2.0;
+        double dx = (Math.random() * size) - half;
+        double dz = (Math.random() * size) - half;
+        return loc.clone().add(0.5 + dx, 0.2, 0.5 + dz);
     }
 
     private void schedulePreciousGenerator(Generator gen) {
@@ -653,8 +670,10 @@ public class GameInstance {
             }
         }
         if (nearby.isEmpty()) {
-            gen.getLocation().getWorld().dropItem(gen.getLocation().clone().add(0.5, 0.2, 0.5),
-                    new ItemStack(gen.getType().getMaterial(), 1));
+            Location dropLoc = gen.getTeam() != null
+                    ? randomizeWithinZone(gen.getLocation(), 3) // générateur de forge : zone 3x3
+                    : gen.getLocation().clone().add(0.5, 0.2, 0.5);
+            gen.getLocation().getWorld().dropItem(dropLoc, new ItemStack(gen.getType().getMaterial(), 1));
         } else {
             for (Player p : nearby) {
                 giveOrDrop(p, new ItemStack(gen.getType().getMaterial(), 1));
@@ -765,27 +784,26 @@ public class GameInstance {
         broadcastToArena(ChatColor.DARK_RED + "" + ChatColor.BOLD + "MORT SUBITE ! Des dragons apparaissent !");
 
         int height = plugin.getConfig().getInt("game.sudden-death-dragon-height-above-bed", 20);
-        List<EnderDragon> dragons = new ArrayList<>();
         for (TeamColor color : TeamColor.forTeamCount(arena.getTeamCount())) {
             ArenaTeam team = arena.getTeams().get(color);
             if (team == null || team.getBedLocation() == null) continue;
             if (team.isEliminated()) continue;
             Location spawnLoc = team.getBedLocation().clone().add(0, height, 0);
-            dragons.add(spawnDragonFor(color, spawnLoc));
+            spawnedDragons.add(spawnDragonFor(color, spawnLoc));
 
             // "Dragon Buff" (Amélioration d'équipe) : un second dragon, uniquement à la mort
             // subite (une fois toutes les phases/le compteur terminés), pas avant.
             TeamUpgrades upgrades = teamUpgrades.get(color);
             if (upgrades != null && upgrades.isDragonBuff()) {
                 Location secondSpawnLoc = spawnLoc.clone().add(4, 2, 4);
-                dragons.add(spawnDragonFor(color, secondSpawnLoc));
+                spawnedDragons.add(spawnDragonFor(color, secondSpawnLoc));
             }
         }
 
         // Tâche périodique : chaque dragon vise un joueur d'une autre équipe.
-        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+        dragonTargetingTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
             if (arena.getState() != ArenaState.SUDDEN_DEATH) return;
-            for (EnderDragon dragon : dragons) {
+            for (EnderDragon dragon : spawnedDragons) {
                 if (dragon.isDead()) continue;
                 TeamColor dragonTeam = teamColorFromDragonName(dragon.getCustomName());
                 Player target = findEnemyPlayer(dragonTeam);
@@ -794,6 +812,20 @@ public class GameInstance {
                 }
             }
         }, 0L, 60L);
+    }
+
+    /** Supprime tous les dragons de cette partie (appelé au début ET à la fin, sécurité anti-résidus). */
+    private void killAllDragons() {
+        for (EnderDragon dragon : spawnedDragons) {
+            if (dragon != null && dragon.isValid() && !dragon.isDead()) {
+                dragon.remove();
+            }
+        }
+        spawnedDragons.clear();
+        if (dragonTargetingTask != null) {
+            dragonTargetingTask.cancel();
+            dragonTargetingTask = null;
+        }
     }
 
     private TeamColor teamColorFromDragonName(String name) {
@@ -893,8 +925,9 @@ public class GameInstance {
 
     public void toSpectator(Player player) {
         player.setGameMode(GameMode.SPECTATOR);
-        if (arena.getSpecLocation() != null) {
-            player.teleport(arena.getSpecLocation());
+        Location target = arena.getSpectatorSpawnLocation() != null ? arena.getSpectatorSpawnLocation() : arena.getSpecLocation();
+        if (target != null) {
+            player.teleport(target);
         }
         if (!arena.getSpectators().contains(player.getUniqueId())) {
             arena.getSpectators().add(player.getUniqueId());
@@ -958,9 +991,7 @@ public class GameInstance {
             plugin.getScoreboardManager().clear(p);
             p.setGameMode(GameMode.SURVIVAL);
             p.getInventory().clear();
-            if (arena.getSpecLocation() != null) {
-                p.teleport(arena.getSpecLocation());
-            }
+            plugin.getGameManager().returnPlayer(p);
         }
         plugin.getArenaManager().restoreRegion(arena);
         arena.resetRuntime();
@@ -986,6 +1017,7 @@ public class GameInstance {
         if (upgradeEffectsTask != null) upgradeEffectsTask.cancel();
         if (forgeBonusTask != null) forgeBonusTask.cancel();
         for (BukkitTask task : preciousTasks.values()) task.cancel();
+        killAllDragons();
     }
 
     // ---------------------------------------------------------------

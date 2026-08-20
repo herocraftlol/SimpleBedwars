@@ -3,15 +3,19 @@ package com.bedwars.game;
 import com.bedwars.BedwarsPlugin;
 import com.bedwars.arena.Arena;
 import com.bedwars.arena.ArenaState;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
 public class GameManager {
 
     private final BedwarsPlugin plugin;
     private final Map<String, GameInstance> instances = new HashMap<>();
+    /** Position de chaque joueur juste avant son /bd join, pour l'y renvoyer en fin de partie. */
+    private final Map<UUID, Location> returnLocations = new HashMap<>();
 
     public GameManager(BedwarsPlugin plugin) {
         this.plugin = plugin;
@@ -40,7 +44,22 @@ public class GameManager {
     public boolean joinArena(Player player, Arena arena) {
         if (!arena.isSaved()) return false;
         GameInstance instance = getInstance(arena);
-        return instance.addPlayer(player);
+        // On ne mémorise la position de départ que si elle n'est pas déjà suivie (évite d'écraser
+        // la vraie position d'origine si le joueur enchaîne les parties sans jamais être renvoyé).
+        returnLocations.putIfAbsent(player.getUniqueId(), player.getLocation());
+        boolean joined = instance.addPlayer(player);
+        if (!joined) returnLocations.remove(player.getUniqueId());
+        return joined;
+    }
+
+    /** Téléporte un joueur là où il se trouvait juste avant son tout premier /bd join (sinon le spawn du monde). */
+    public void returnPlayer(Player player) {
+        Location loc = returnLocations.remove(player.getUniqueId());
+        if (loc != null && loc.getWorld() != null) {
+            player.teleport(loc);
+        } else if (player.getWorld().getSpawnLocation() != null) {
+            player.teleport(player.getWorld().getSpawnLocation());
+        }
     }
 
     public GameInstance findInstanceOf(Player player) {
@@ -54,16 +73,14 @@ public class GameManager {
         return null;
     }
 
-    /** Fait quitter proprement un joueur de la partie/du lobby où il se trouve, et le renvoie au spawn du monde. */
+    /** Fait quitter proprement un joueur de la partie/du lobby où il se trouve, et le renvoie où il était avant. */
     public boolean leave(Player player) {
         GameInstance instance = findInstanceOf(player);
         if (instance == null) return false;
         instance.handlePlayerLeave(player);
         player.setGameMode(org.bukkit.GameMode.SURVIVAL);
         player.getInventory().clear();
-        if (player.getWorld().getSpawnLocation() != null) {
-            player.teleport(player.getWorld().getSpawnLocation());
-        }
+        returnPlayer(player);
         return true;
     }
 

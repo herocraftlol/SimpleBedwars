@@ -30,6 +30,9 @@ public class Arena {
     // Une cage invisible (voir WaitingLobbyManager) est construite automatiquement
     // au-dessus de la map, centrée sur cet emplacement, tant que des joueurs attendent.
     private Location specLocation;
+    /** Point (optionnel) où sont téléportés les spectateurs "actifs" (morts définitivement,
+     *  ou observateurs) — typiquement au milieu de la map. Si non défini, on retombe sur specLocation. */
+    private Location spectatorSpawnLocation;
 
     private boolean saved = false; // true = configuration validée par /bd <nom> save
 
@@ -107,6 +110,14 @@ public class Arena {
 
     public void setSpecLocation(Location specLocation) {
         this.specLocation = specLocation;
+    }
+
+    public Location getSpectatorSpawnLocation() {
+        return spectatorSpawnLocation;
+    }
+
+    public void setSpectatorSpawnLocation(Location spectatorSpawnLocation) {
+        this.spectatorSpawnLocation = spectatorSpawnLocation;
     }
 
     public boolean isSaved() {

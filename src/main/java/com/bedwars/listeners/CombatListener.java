@@ -9,6 +9,7 @@ import com.bedwars.game.GameInstance;
 import com.bedwars.util.BedUtil;
 import org.bukkit.ChatColor;
 import org.bukkit.GameMode;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -174,12 +175,16 @@ public class CombatListener implements Listener {
         if (team != null && !team.isBedDestroyed() && team.getSpawnLocation() != null) {
             event.setRespawnLocation(team.getSpawnLocation());
             plugin.getServer().getScheduler().runTask(plugin, () -> game.respawnAtTeamSpawn(player));
-        } else if (game.getArena().getSpecLocation() != null) {
-            event.setRespawnLocation(game.getArena().getSpecLocation());
-            plugin.getServer().getScheduler().runTask(plugin, () -> {
-                player.setGameMode(GameMode.SPECTATOR);
-                game.toSpectator(player);
-            });
+        } else {
+            Location specTarget = game.getArena().getSpectatorSpawnLocation() != null
+                    ? game.getArena().getSpectatorSpawnLocation() : game.getArena().getSpecLocation();
+            if (specTarget != null) {
+                event.setRespawnLocation(specTarget);
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    player.setGameMode(GameMode.SPECTATOR);
+                    game.toSpectator(player);
+                });
+            }
         }
     }
 }
