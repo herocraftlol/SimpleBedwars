@@ -54,7 +54,7 @@ public class PlayerProtectionListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         GameInstance game = plugin.getGameManager().findInstanceOf(event.getPlayer());
         if (game != null) {
-            game.removeWaitingPlayer(event.getPlayer());
+            game.handlePlayerLeave(event.getPlayer());
         }
     }
 }

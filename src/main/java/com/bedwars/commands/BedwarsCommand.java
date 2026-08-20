@@ -111,6 +111,8 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
             case "spawn" -> handleSpawn(player, arena, args);
             case "item" -> handleItem(player, arena, args);
             case "forge" -> handleForge(player, arena, args);
+            case "geninfo" -> handleGenInfo(player, arena);
+            case "reset" -> handleReset(player, arena);
             case "shop" -> handleShop(player, arena, args);
             case "spec" -> {
                 arena.setSpecLocation(player.getLocation());
@@ -579,6 +581,40 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
                 + ChatColor.GREEN + " (générateurs de fer et d'or créés ici, accélérés par l'amélioration Forge).");
     }
 
+    /** /bd <nom> geninfo : liste tous les générateurs de l'arène (type, équipe, position) pour diagnostiquer. */
+    private void handleGenInfo(Player player, Arena arena) {
+        if (arena.getGenerators().isEmpty()) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Aucun générateur configuré sur " + arena.getName() + ".");
+            return;
+        }
+        player.sendMessage(PREFIX + ChatColor.YELLOW + arena.getGenerators().size() + " générateur(s) sur " + arena.getName() + ":");
+        int i = 1;
+        for (Generator gen : arena.getGenerators()) {
+            Location loc = gen.getLocation();
+            String pos = loc == null ? "?" : (int) loc.getX() + "," + (int) loc.getY() + "," + (int) loc.getZ();
+            String teamInfo = gen.getTeam() != null ? " - équipe " + gen.getTeam().getColoredName() : ChatColor.GRAY + " (commun)";
+            player.sendMessage(ChatColor.GRAY + " " + i + ". " + ChatColor.WHITE + gen.getType() + ChatColor.GRAY + " @ " + pos + teamInfo);
+            i++;
+        }
+    }
+
+    /**
+     * /bd <nom> reset : réinitialise immédiatement l'arène quel que soit son état (lobby
+     * d'attente, compte à rebours, partie en cours...) — tous les joueurs/spectateurs sont
+     * renvoyés au spawn du monde, la map est entièrement restaurée, et l'arène redevient
+     * disponible pour une nouvelle partie.
+     */
+    private void handleReset(Player player, Arena arena) {
+        var instance = plugin.getGameManager().getExistingInstance(arena);
+        if (instance == null) {
+            player.sendMessage(PREFIX + ChatColor.YELLOW + "Aucune partie/lobby en cours sur " + arena.getName() + ", rien à réinitialiser.");
+            return;
+        }
+        instance.forceReset();
+        player.sendMessage(PREFIX + ChatColor.GREEN + "Arène " + ChatColor.YELLOW + arena.getName()
+                + ChatColor.GREEN + " réinitialisée : tous les joueurs ont été renvoyés, la map a été restaurée.");
+    }
+
     private void handleShop(Player player, Arena arena, String[] args) {
         if (args.length < 5 || !args[3].equalsIgnoreCase("color")) {
             player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd " + arena.getName()
@@ -685,6 +721,8 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> spawn <couleur>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> item <diamand|emeraude>" + ChatColor.DARK_GRAY + " (générateurs communs de la map)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> forge <couleur>" + ChatColor.DARK_GRAY + " (crée fer+or de l'équipe, accélérés par l'amélioration Forge)");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> geninfo" + ChatColor.DARK_GRAY + " (liste tous les générateurs pour diagnostiquer)");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> reset" + ChatColor.DARK_GRAY + " (réinitialise immédiatement une arène, même en pleine partie)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> shop <shop|upgrade> color <couleur> [pseudo]");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> spec " + ChatColor.DARK_GRAY + "(= centre du lobby d'attente flottant)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> minplayers <nombre|off>" + ChatColor.DARK_GRAY + " (seuil pour lancer le compte à rebours)");
@@ -708,7 +746,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
                 options.addAll(List.of("blocks", "melee", "armor", "ranged", "potions", "utility"));
             } else if (plugin.getArenaManager().getArena(args[0]) != null) {
                 options.addAll(List.of("equipe", "pos1", "pos2", "posconfirm", "bed", "spawn",
-                        "item", "forge", "shop", "spec", "minplayers", "save", "edit", "config"));
+                        "item", "forge", "geninfo", "reset", "shop", "spec", "minplayers", "save", "edit", "config"));
             }
         } else if (args.length == 7 && args[0].equalsIgnoreCase("shop")) {
             options.addAll(List.of("fer", "or", "diamand", "emeraude"));

@@ -58,7 +58,7 @@ public class GameManager {
     public boolean leave(Player player) {
         GameInstance instance = findInstanceOf(player);
         if (instance == null) return false;
-        instance.removeWaitingPlayer(player);
+        instance.handlePlayerLeave(player);
         player.setGameMode(org.bukkit.GameMode.SURVIVAL);
         player.getInventory().clear();
         if (player.getWorld().getSpawnLocation() != null) {

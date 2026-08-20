@@ -13,7 +13,7 @@ dragons.
 
 ## 📦 Installation
 
-1. Télécharge le fichier `BedwarsPlugin-1.0.13.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
+1. Télécharge le fichier `BedwarsPlugin-1.0.14.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
 2. Place le `.jar` dans le dossier `plugins/` de ton serveur Paper 1.21+.
 3. Redémarre le serveur.
 4. Configure tes arènes avec les commandes `/bd ...` (voir ci-dessous).
@@ -48,6 +48,8 @@ shade-plugin). Compilation vérifiée et réussie avec Maven + Paper 1.21.1 API 
 /bd <nom> spawn <couleur>
 /bd <nom> item <diamand|emeraude>                    (générateurs communs de la map)
 /bd <nom> forge <couleur>                            (crée la forge de l'équipe : générateurs fer+or + bonus Forge)
+/bd <nom> geninfo                                     (liste tous les générateurs pour diagnostiquer)
+/bd <nom> reset                                       (réinitialise immédiatement l'arène, même en pleine partie)
 /bd <nom> shop <shop|upgrade> color <couleur> [pseudo]   (pseudo optionnel = skin du PNJ)
 /bd <nom> spec                                       (= aussi le centre du lobby d'attente flottant)
 /bd <nom> minplayers <nombre|off>                    (seuil pour lancer le compte à rebours)
@@ -233,8 +235,55 @@ com.bedwars
 - 🎨 **Couleurs d'équipe génériques** : recoloration automatique des blocs colorés.
 - 🖥️ **GUI d'admin paginé** + menu joueur avec codes couleur par statut.
 - 📊 **Scoreboard dynamique** et réinitialisation automatique de la map après chaque partie.
+- ♻️ **Réinitialisation d'arène à la demande** (`/bd <nom> reset`), même en pleine partie.
+- 🏆 **Victoire automatique** dès qu'il ne reste plus qu'une seule équipe en jeu.
 
-## 🆕 Nouveautés de la version 1.0.13
+## 🆕 Nouveautés de la version 1.0.14
+
+Itération **qualité de vie & fiabilité** : quitter une partie fait maintenant vraiment quitter la
+partie, une arène peut être réinitialisée à tout moment, et la victoire est détectée
+automatiquement quand il ne reste qu'une équipe.
+
+### 🚪 `/bd leave` (et le bouton « Quitter » du lobby) fait vraiment quitter l'arène
+- En plus de sortir du lobby d'attente, un joueur **en pleine partie** est retiré de son équipe et
+  son scoreboard disparaît immédiatement.
+- Une **déconnexion** du serveur déclenche désormais exactement le même nettoyage complet (avant,
+  seule la sortie du lobby d'attente était gérée — un joueur déconnecté restait « fantôme » dans
+  son équipe).
+
+### 🏆 Victoire automatique dès qu'une seule équipe reste en jeu
+- Que le dernier joueur d'une équipe soit **éliminé** (lit détruit + mort finale) ou que toute
+  l'équipe ait **quitté volontairement** la partie, la condition de victoire est vérifiée de la
+  même façon : dès qu'il ne reste plus qu'une équipe avec des joueurs, elle gagne automatiquement.
+
+### ♻️ `/bd <nom> reset` : réinitialisation immédiate d'une arène
+- Fonctionne **quel que soit l'état** de l'arène (lobby d'attente, compte à rebours, partie en
+  cours, mort subite…).
+- Tous les joueurs et spectateurs sont renvoyés au spawn du monde, la map est **entièrement
+  restaurée** à son état sauvegardé, et l'arène redevient aussitôt disponible pour une nouvelle
+  partie.
+
+### 🔍 `/bd <nom> geninfo` : diagnostic des générateurs
+- Liste tous les générateurs de l'arène (type, équipe assignée, position) — idéal pour vérifier
+  qu'une forge a bien créé ses générateurs fer/or avec la bonne équipe.
+
+### ⛏️ Générateurs plus réactifs
+- L'**or** apparaît désormais toutes les **2 secondes** par défaut (`gold-interval-ticks: 40`,
+  contre 4 s auparavant) ; le fer reste à 1 seconde.
+- Le rayon de ramassage autour des générateurs fer/or passe de **4 à 6 blocs**, et un **son de
+  ramassage** est joué à chaque item reçu pour un retour immédiat.
+- ⚠️ Si un `config.yml` existe déjà sur ton serveur, supprime-le (ou édite la ligne
+  `gold-interval-ticks`) : Bukkit ne réécrit jamais un fichier de configuration existant.
+
+### ✅ Compilation
+- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
+- Le jar `BedwarsPlugin-1.0.14.jar` est compilé et prêt à l'emploi.
+
+### 🔄 Mise à jour
+- Numéro de version porté à **1.0.14** (`pom.xml` + `plugin.yml`).
+- README mis à jour (nouveautés 1.0.14, liste des commandes).
+
+## 📜 Historique — version 1.0.13
 
 Itération de **simplification de la configuration** : la forge d'équipe et ses générateurs de
 fer/or ne font désormais plus qu'un, et la validation d'arène s'adapte en conséquence.

@@ -153,6 +153,52 @@ public class GameInstance {
         }
     }
 
+    /**
+     * Fait quitter un joueur complètement (utilisé par /bd leave et le bouton "Quitter" du
+     * lobby) : le retire du lobby d'attente ET, s'il était en train de jouer, de son équipe et
+     * de la partie elle-même — son scoreboard disparaît immédiatement, et si cela ne laisse plus
+     * qu'une seule équipe avec des joueurs, elle gagne automatiquement.
+     */
+    public void handlePlayerLeave(Player player) {
+        UUID uuid = player.getUniqueId();
+        removeWaitingPlayer(player);
+        arena.getSpectators().remove(uuid);
+        plugin.getScoreboardManager().clear(player);
+
+        TeamColor color = playerTeams.remove(uuid);
+        if (color != null) {
+            ArenaTeam team = arena.getTeams().get(color);
+            if (team != null) {
+                boolean wasAlive = team.getAlivePlayers().remove(uuid);
+                team.getMembers().remove(uuid);
+                if (wasAlive) {
+                    if (team.getAlivePlayers().isEmpty()
+                            && (arena.getState() == ArenaState.PLAYING || arena.getState() == ArenaState.SUDDEN_DEATH)) {
+                        broadcastToArena(color.getColoredName() + ChatColor.GRAY
+                                + " a quitté la partie et n'a plus aucun joueur en jeu.");
+                    }
+                    checkGameEnd();
+                }
+            }
+        }
+    }
+
+    /**
+     * Réinitialise immédiatement une arène (admin), quel que soit son état (lobby d'attente,
+     * compte à rebours, partie en cours...) : renvoie tous les joueurs/spectateurs au spawn du
+     * monde, restaure entièrement la map, et repart sur une instance de partie neuve.
+     */
+    public void forceReset() {
+        boolean hadParticipants = !getAllParticipantIds().isEmpty();
+        cancelAllTasks();
+        arena.setState(ArenaState.ENDING);
+        plugin.getWaitingLobbyManager().destroy(arena);
+        if (hadParticipants) {
+            broadcastToArena(ChatColor.RED + "" + ChatColor.BOLD + "Cette arène a été réinitialisée par un administrateur.");
+        }
+        resetArena();
+    }
+
     private void startCountdown() {
         arena.setState(ArenaState.STARTING);
         lobbyCountdown = plugin.getConfig().getInt("game.countdown-lobby-seconds", 10);
@@ -602,7 +648,7 @@ public class GameInstance {
             Player p = Bukkit.getPlayer(uuid);
             if (p == null || !isAlivePlaying(p)) continue;
             if (p.getLocation().getWorld().equals(gen.getLocation().getWorld())
-                    && p.getLocation().distanceSquared(gen.getLocation()) <= 4.0 * 4.0) {
+                    && p.getLocation().distanceSquared(gen.getLocation()) <= 6.0 * 6.0) {
                 nearby.add(p);
             }
         }
@@ -612,6 +658,7 @@ public class GameInstance {
         } else {
             for (Player p : nearby) {
                 giveOrDrop(p, new ItemStack(gen.getType().getMaterial(), 1));
+                p.playSound(p.getLocation(), org.bukkit.Sound.ENTITY_ITEM_PICKUP, 0.4f, 1.4f);
             }
         }
     }
@@ -855,11 +902,15 @@ public class GameInstance {
     }
 
     private void checkGameEnd() {
+        if (arena.getState() != ArenaState.PLAYING && arena.getState() != ArenaState.SUDDEN_DEATH) return;
         List<TeamColor> remaining = new ArrayList<>();
         for (TeamColor color : TeamColor.forTeamCount(arena.getTeamCount())) {
             ArenaTeam team = arena.getTeams().get(color);
             if (team == null) continue;
-            if (!team.isEliminated()) remaining.add(color);
+            // Une équipe n'est plus "en jeu" dès qu'elle n'a plus personne qui puisse encore
+            // respawn — que ce soit parce que son lit a été détruit (mort finale) ou parce que
+            // tous ses joueurs ont quitté la partie (/bd leave), peu importe l'état du lit.
+            if (!team.getAlivePlayers().isEmpty()) remaining.add(color);
         }
         if (remaining.size() <= 1) {
             TeamColor winner = remaining.isEmpty() ? null : remaining.get(0);
