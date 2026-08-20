@@ -42,6 +42,7 @@ public class ScoreboardManager {
             }
 
             score = writeLine(obj, score, "  ");
+            score = writeLine(obj, score, ChatColor.AQUA + game.getPhaseCountdownLabel());
             score = writeLine(obj, score, ChatColor.YELLOW + "Kills: " + ChatColor.WHITE + game.getKills(player.getUniqueId()));
             score = writeLine(obj, score, ChatColor.YELLOW + "Final Kills: " + ChatColor.WHITE + game.getFinalKills(player.getUniqueId()));
             score = writeLine(obj, score, "   ");

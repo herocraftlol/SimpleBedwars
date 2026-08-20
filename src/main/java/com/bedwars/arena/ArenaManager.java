@@ -89,6 +89,7 @@ public class ArenaManager {
             LocationUtil.save(config, base + ".spawn", team.getSpawnLocation());
             LocationUtil.save(config, base + ".shop", team.getShopLocation());
             LocationUtil.save(config, base + ".upgrade", team.getUpgradeLocation());
+            LocationUtil.save(config, base + ".forge", team.getForgeLocation());
         }
 
         int gi = 0;
@@ -153,6 +154,7 @@ public class ArenaManager {
                 team.setSpawnLocation(LocationUtil.load(config, base + ".spawn"));
                 team.setShopLocation(LocationUtil.load(config, base + ".shop"));
                 team.setUpgradeLocation(LocationUtil.load(config, base + ".upgrade"));
+                team.setForgeLocation(LocationUtil.load(config, base + ".forge"));
             }
         }
 
@@ -170,7 +172,6 @@ public class ArenaManager {
             }
         }
 
-        arena.setState(ArenaState.SETUP);
         arenas.put(name.toLowerCase(), arena);
     }
 
@@ -244,6 +245,7 @@ public class ArenaManager {
             dstTeam.setSpawnLocation(translate(srcTeam.getSpawnLocation(), dx, dy, dz, newWorld));
             dstTeam.setShopLocation(translate(srcTeam.getShopLocation(), dx, dy, dz, newWorld));
             dstTeam.setUpgradeLocation(translate(srcTeam.getUpgradeLocation(), dx, dy, dz, newWorld));
+            dstTeam.setForgeLocation(translate(srcTeam.getForgeLocation(), dx, dy, dz, newWorld));
         }
 
         for (Generator gen : source.getGenerators()) {

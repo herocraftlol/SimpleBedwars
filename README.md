@@ -13,7 +13,7 @@ dragons.
 
 ## 📦 Installation
 
-1. Télécharge le fichier `BedwarsPlugin-1.0.11.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
+1. Télécharge le fichier `BedwarsPlugin-1.0.12.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
 2. Place le `.jar` dans le dossier `plugins/` de ton serveur Paper 1.21+.
 3. Redémarre le serveur.
 4. Configure tes arènes avec les commandes `/bd ...` (voir ci-dessous).
@@ -39,6 +39,7 @@ shade-plugin). Compilation vérifiée et réussie avec Maven + Paper 1.21.1 API 
 /bd arene gui                                        (affiche directement le GUI des arènes)
 /bd arene clean                                      (purge les PNJ marchand/amélioration fantômes)
 /bd join <nom>
+/bd spectate <nom>                                  (rejoint une partie en cours en spectateur)
 /bd leave
 /bd list
 /bd <nom> equipe <2/4/6/8> <joueurs par équipe>
@@ -46,11 +47,12 @@ shade-plugin). Compilation vérifiée et réussie avec Maven + Paper 1.21.1 API 
 /bd <nom> bed <couleur>
 /bd <nom> spawn <couleur>
 /bd <nom> item <fer|or|diamand|emeraude>
+/bd <nom> forge <couleur>                            (point d'apparition des bonus Forge diamant/émeraude)
 /bd <nom> shop <shop|upgrade> color <couleur> [pseudo]   (pseudo optionnel = skin du PNJ)
 /bd <nom> spec                                       (= aussi le centre du lobby d'attente flottant)
 /bd <nom> minplayers <nombre|off>                    (seuil pour lancer le compte à rebours)
 /bd <nom> save
-/bd <nom> config
+/bd <nom> config   (alias : edit — repasse l'arène en mode édition libre de la map)
 ```
 
 Permission `bedwars.admin` (op par défaut) pour tout ce qui configure/supprime une arène ;
@@ -232,7 +234,68 @@ com.bedwars
 - 🖥️ **GUI d'admin paginé** + menu joueur avec codes couleur par statut.
 - 📊 **Scoreboard dynamique** et réinitialisation automatique de la map après chaque partie.
 
-## 🆕 Nouveautés de la version 1.0.11
+## 🆕 Nouveautés de la version 1.0.12
+
+Grosse itération **gameplay** : le kit de base s'enrichit, l'épée devient améliorable, la Forge
+produit désormais du diamant et de l'émeraude, et le Dragon Buff est repensé. À noter : les
+améliorations d'équipe **repartent toujours de zéro** à chaque nouvelle partie.
+
+### ⚔️ Épée à paliers (bois → pierre → fer → diamant)
+- L'onglet **Tools** du Marchand propose désormais un troisième palier d'amélioration : l'**épée**.
+  Comme la pioche et la hache, elle progresse par paliers payés en ressources (pierre : 10 fer,
+  fer : 7 or, diamant : 4 émeraudes) et **redescend d'un cran à chaque mort** — le palier bois
+  est acquis pour toujours.
+- Les épées ont été **retirées de l'onglet Mêlée** : tout passe désormais par ce système de
+  paliers, comme sur Hypixel.
+
+### 🎒 Kit de base complet et verrouillé (slots 1 / 2 / 3)
+- Chaque joueur en partie reçoit désormais **trois outils verrouillés** dans sa hotbar : l'épée
+  (slot 1), la hache (slot 2) et la pioche (slot 3), tous au palier actuel du joueur.
+- Comme l'ancienne épée en bois protégée, ces trois items sont **indroppables, indéplaçables,
+  indupliquables** et impossibles à échanger en main secondaire — et ce quel que soit leur palier.
+
+### 🔥 Forge repensée : diamants et émeraudes à la base
+- Nouveaux multiplicateurs de vitesse des générateurs fer/or : **palier 1 ×1.25, palier 2 ×1.75,
+  palier 3 ×2.0, palier 4 ×2.25**.
+- **Nouveau — palier 3** : du **diamant** apparaît directement à la base de l'équipe (1 par minute).
+- **Nouveau — palier 4** : le diamant accélère (1 toutes les 15 s) et de l'**émeraude** s'ajoute
+  (1 toutes les 2 minutes).
+- Ces bonus apparaissent au **point de forge de l'équipe**, à définir une fois via la nouvelle
+  commande `/bd <nom> forge <couleur>` (sauvegardé et cloné avec `/bd copy` comme les autres points).
+
+### 🗡️ Sharpened Blades plus juste
+- L'amélioration applique désormais l'enchantement **Tranchant directement sur l'épée du slot 1**,
+  au lieu d'un effet de potion Force qui boostait aussi les poings et les autres armes. Le bonus
+  se met à jour instantanément pour toute l'équipe à l'achat.
+
+### 🐉 Dragon Buff repensé
+- Fini le dragon gardien permanent spawné à l'achat : l'équipe qui possède Dragon Buff reçoit
+  désormais **un second dragon à la mort subite**, une fois le compteur et les phases terminés —
+  exactement au moment où les dragons entrent en jeu.
+
+### 👁️ `/bd spectate <nom>` et mode édition libre
+- **Nouvelle commande `/bd spectate <nom>`** : rejoint n'importe quelle partie en cours (ou en
+  mort subite) en tant que spectateur, sans passer par le GUI.
+- `/bd <nom> edit` (alias de `config`) : repasse l'arène en mode édition ; un admin peut alors
+  **modifier librement la map** (poser/casser des blocs) même s'il est marqué participant.
+
+### 📊 Scoreboard : compte à rebours de la prochaine phase
+- Le scoreboard affiche maintenant en direct **la prochaine phase et le temps restant** avant
+  qu'elle démarre (Phase 2, Phase 3 ou Mort subite).
+
+### ✅ Fiabilité & compilation
+- Les générateurs ne produisent **plus jamais de ressources hors partie** ni lorsqu'il n'y a plus
+  aucun joueur en jeu.
+- Les PNJ Marchand / Amélioration sont **respawnés automatiquement au lancement** de chaque partie
+  (sécurité contre les chunks déchargés ou un redémarrage entre la configuration et le match).
+- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
+- Le jar `BedwarsPlugin-1.0.12.jar` est compilé et prêt à l'emploi.
+
+### 🔄 Mise à jour
+- Numéro de version porté à **1.0.12** (`pom.xml` + `plugin.yml`).
+- README mis à jour (nouveautés 1.0.12).
+
+## 📜 Historique — version 1.0.11
 
 Version de **fiabilisation technique** : la récupération des skins des PNJ est consolidée et la
 compilation est de nouveau vérifiée de bout en bout. Aucun changement de gameplay — vos arènes,

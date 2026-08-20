@@ -19,6 +19,9 @@ public class ArenaTeam {
     private Location spawnLocation;
     private Location shopLocation;
     private Location upgradeLocation;
+    /** Point d'ancrage de la "forge de base" : c'est là que les bonus diamant/émeraude de la
+     *  Forge (Amélioration d'équipe) apparaissent, à partir du palier 3 (voir GameInstance). */
+    private Location forgeLocation;
 
     // État runtime (partie en cours)
     private boolean bedDestroyed = false;
@@ -68,6 +71,14 @@ public class ArenaTeam {
 
     public void setUpgradeLocation(Location upgradeLocation) {
         this.upgradeLocation = upgradeLocation;
+    }
+
+    public Location getForgeLocation() {
+        return forgeLocation;
+    }
+
+    public void setForgeLocation(Location forgeLocation) {
+        this.forgeLocation = forgeLocation;
     }
 
     public boolean isBedDestroyed() {

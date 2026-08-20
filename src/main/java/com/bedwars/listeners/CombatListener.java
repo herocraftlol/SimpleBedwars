@@ -2,6 +2,7 @@ package com.bedwars.listeners;
 
 import com.bedwars.BedwarsPlugin;
 import com.bedwars.arena.Arena;
+import com.bedwars.arena.ArenaState;
 import com.bedwars.arena.ArenaTeam;
 import com.bedwars.arena.TeamColor;
 import com.bedwars.game.GameInstance;
@@ -67,6 +68,12 @@ public class CombatListener implements Listener {
         if (game == null) return;
 
         Arena arena = game.getArena();
+
+        // Mode édition : tant que l'arène est en configuration (non lancée), un admin peut
+        // librement modifier la map, même s'il est par ailleurs "participant" (ex: test de spawn).
+        if (arena.getState() == ArenaState.SETUP && breaker.hasPermission("bedwars.admin")) {
+            return;
+        }
         for (TeamColor color : TeamColor.forTeamCount(arena.getTeamCount())) {
             ArenaTeam team = arena.getTeams().get(color);
             if (team == null || team.getBedLocation() == null || team.isBedDestroyed()) continue;

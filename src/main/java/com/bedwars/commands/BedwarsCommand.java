@@ -56,6 +56,9 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         if (sub.equals("join")) {
             return handleJoin(sender, args);
         }
+        if (sub.equals("spectate")) {
+            return handleSpectate(sender, args);
+        }
         if (sub.equals("leave")) {
             return handleLeave(sender);
         }
@@ -107,6 +110,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
             case "bed" -> handleBed(player, arena, args);
             case "spawn" -> handleSpawn(player, arena, args);
             case "item" -> handleItem(player, arena, args);
+            case "forge" -> handleForge(player, arena, args);
             case "shop" -> handleShop(player, arena, args);
             case "spec" -> {
                 arena.setSpecLocation(player.getLocation());
@@ -114,11 +118,12 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
             }
             case "minplayers" -> handleMinPlayers(player, arena, args);
             case "save" -> handleSave(player, arena);
-            case "config" -> {
+            case "config", "edit" -> {
                 arena.setSaved(false);
                 arena.setState(ArenaState.SETUP);
-                player.sendMessage(PREFIX + ChatColor.YELLOW + "Mode configuration activé pour " + arena.getName()
-                        + ". Refaites /bd " + arena.getName() + " save une fois vos modifications terminées.");
+                player.sendMessage(PREFIX + ChatColor.YELLOW + "Mode édition activé pour " + arena.getName()
+                        + " : vous pouvez à nouveau modifier librement la map (blocs, etc.)."
+                        + " Refaites /bd " + arena.getName() + " save une fois vos modifications terminées.");
             }
             default -> player.sendMessage(PREFIX + ChatColor.RED + "Action inconnue: " + action);
         }
@@ -404,6 +409,36 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    /** /bd spectate <nom> : rejoint une partie en cours en tant que spectateur. */
+    private boolean handleSpectate(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Cette action doit être exécutée en jeu.");
+            return true;
+        }
+        if (args.length < 2) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd spectate <nom>");
+            return true;
+        }
+        Arena arena = plugin.getArenaManager().getArena(args[1]);
+        if (arena == null) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Arène inconnue: " + args[1]);
+            return true;
+        }
+        if (arena.getState() != ArenaState.PLAYING && arena.getState() != ArenaState.SUDDEN_DEATH) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Cette partie n'est pas en cours.");
+            return true;
+        }
+        var instance = plugin.getGameManager().getExistingInstance(arena);
+        if (instance == null) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Cette partie n'est pas en cours.");
+            return true;
+        }
+        instance.toSpectator(player);
+        player.sendMessage(PREFIX + ChatColor.GREEN + "Vous observez maintenant la partie " + ChatColor.YELLOW + arena.getName()
+                + ChatColor.GREEN + " en spectateur.");
+        return true;
+    }
+
     private boolean handleLeave(CommandSender sender) {
         if (!(sender instanceof Player player)) return true;
         if (!plugin.getGameManager().leave(player)) {
@@ -496,7 +531,8 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
 
     private void handleItem(Player player, Arena arena, String[] args) {
         if (args.length < 3) {
-            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd " + arena.getName() + " item <fer|or|diamand|emeraude>");
+            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd " + arena.getName()
+                    + " item <fer|or|diamand|emeraude> [couleur d'équipe]");
             return;
         }
         GeneratorType type = GeneratorType.fromInput(args[2]);
@@ -505,8 +541,37 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
             return;
         }
         Generator generator = new Generator(type, player.getLocation());
+
+        if (args.length >= 4) {
+            TeamColor color = resolveColor(player, arena, args[3]);
+            if (color == null) return;
+            generator.setTeam(color);
+        }
+
         arena.getGenerators().add(generator);
-        player.sendMessage(PREFIX + ChatColor.GREEN + "Générateur de " + args[2] + " ajouté à " + arena.getName() + ".");
+        String teamSuffix = generator.getTeam() != null
+                ? " (générateur de base de l'équipe " + generator.getTeam().getColoredName() + ChatColor.GREEN + ", accéléré par la Forge)"
+                : "";
+        player.sendMessage(PREFIX + ChatColor.GREEN + "Générateur de " + args[2] + " ajouté à " + arena.getName() + teamSuffix + ".");
+    }
+
+    /**
+     * /bd <nom> forge <couleur> : définit le point d'ancrage de la "forge de base" d'une équipe.
+     * À partir du palier 3 de l'amélioration Forge, du diamant (puis de l'émeraude au palier 4)
+     * apparaît directement à cet endroit, en plus de l'accélération du fer/or (voir GameInstance).
+     */
+    private void handleForge(Player player, Arena arena, String[] args) {
+        if (args.length < 3) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd " + arena.getName() + " forge <couleur d'équipe>");
+            return;
+        }
+        TeamColor color = resolveColor(player, arena, args[2]);
+        if (color == null) return;
+        ArenaTeam team = arena.getOrCreateTeam(color);
+        team.setForgeLocation(player.getLocation());
+        player.sendMessage(PREFIX + ChatColor.GREEN + "Forge de base définie pour l'équipe " + color.getColoredName()
+                + ChatColor.GREEN + ". Pensez à assigner ses générateurs de fer/or à cette équipe : /bd "
+                + arena.getName() + " item fer " + color.getDisplayName());
     }
 
     private void handleShop(Player player, Arena arena, String[] args) {
@@ -608,36 +673,37 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "/bd shop <catégorie> <slot> <item> <quantité> <prix> <minerai>");
         sender.sendMessage(ChatColor.GRAY + "/bd arene gui" + ChatColor.DARK_GRAY + " (affiche directement le GUI des arènes)");
         sender.sendMessage(ChatColor.GRAY + "/bd arene clean" + ChatColor.DARK_GRAY + " (purge les PNJ marchand/amélioration fantômes)");
-        sender.sendMessage(ChatColor.GRAY + "/bd join <nom>  |  /bd leave  |  /bd list");
+        sender.sendMessage(ChatColor.GRAY + "/bd join <nom>  |  /bd spectate <nom>  |  /bd leave  |  /bd list");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> equipe <2/4/6/8> <joueurs>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> pos1 | pos2 | posconfirm");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> bed <couleur>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> spawn <couleur>");
-        sender.sendMessage(ChatColor.GRAY + "/bd <nom> item <fer|or|diamand|emeraude>");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> item <fer|or|diamand|emeraude> [couleur d'équipe]");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> forge <couleur>" + ChatColor.DARK_GRAY + " (ancre de la forge de base d'une équipe)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> shop <shop|upgrade> color <couleur> [pseudo]");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> spec " + ChatColor.DARK_GRAY + "(= centre du lobby d'attente flottant)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> minplayers <nombre|off>" + ChatColor.DARK_GRAY + " (seuil pour lancer le compte à rebours)");
-        sender.sendMessage(ChatColor.GRAY + "/bd <nom> save  |  /bd <nom> config");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> save  |  /bd <nom> edit" + ChatColor.DARK_GRAY + " (= config, réactive la modification libre de la map)");
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> options = new ArrayList<>();
         if (args.length == 1) {
-            options.addAll(List.of("create", "delete", "copy", "shop", "arene", "join", "leave", "list"));
+            options.addAll(List.of("create", "delete", "copy", "shop", "arene", "join", "spectate", "leave", "list"));
             options.addAll(plugin.getArenaManager().getArenas().keySet());
         } else if (args.length == 2) {
             if (args[0].equalsIgnoreCase("arene")) {
                 options.addAll(List.of("gui", "clean"));
             } else if (args[0].equalsIgnoreCase("join") || args[0].equalsIgnoreCase("delete")
-                    || args[0].equalsIgnoreCase("copy")) {
+                    || args[0].equalsIgnoreCase("copy") || args[0].equalsIgnoreCase("spectate")) {
                 options.addAll(plugin.getArenaManager().getArenas().keySet());
             } else if (args[0].equalsIgnoreCase("shop")) {
                 options.addAll(plugin.getShopConfigManager().getCategories());
                 options.addAll(List.of("blocks", "melee", "armor", "ranged", "potions", "utility"));
             } else if (plugin.getArenaManager().getArena(args[0]) != null) {
                 options.addAll(List.of("equipe", "pos1", "pos2", "posconfirm", "bed", "spawn",
-                        "item", "shop", "spec", "minplayers", "save", "config"));
+                        "item", "forge", "shop", "spec", "minplayers", "save", "edit", "config"));
             }
         } else if (args.length == 7 && args[0].equalsIgnoreCase("shop")) {
             options.addAll(List.of("fer", "or", "diamand", "emeraude"));
@@ -648,13 +714,15 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
             Arena arena = plugin.getArenaManager().getArena(args[0]);
             if (arena != null) {
                 switch (args[1].toLowerCase()) {
-                    case "bed", "spawn" -> options.addAll(colorNames());
+                    case "bed", "spawn", "forge" -> options.addAll(colorNames());
                     case "item" -> options.addAll(List.of("fer", "or", "diamand", "emeraude"));
                     case "shop" -> options.addAll(List.of("shop", "upgrade"));
                 }
             }
         } else if (args.length == 4 && args[1].equalsIgnoreCase("shop")) {
             options.add("color");
+        } else if (args.length == 4 && args[1].equalsIgnoreCase("item")) {
+            options.addAll(colorNames());
         } else if (args.length == 5 && args[1].equalsIgnoreCase("shop")) {
             options.addAll(colorNames());
         }

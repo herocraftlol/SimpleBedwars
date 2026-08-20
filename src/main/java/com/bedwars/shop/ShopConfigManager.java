@@ -132,10 +132,8 @@ public class ShopConfigManager {
         setItemSilent("blocks", slot++, new ShopItem(Material.OAK_PLANKS, 16, Material.IRON_INGOT, 8));
         setItemSilent("blocks", slot, new ShopItem(Material.OBSIDIAN, 4, Material.EMERALD, 4));
 
-        slot = 9;
-        setItemSilent("melee", slot++, new ShopItem(Material.STONE_SWORD, 1, Material.IRON_INGOT, 10));
-        setItemSilent("melee", slot++, new ShopItem(Material.IRON_SWORD, 1, Material.GOLD_INGOT, 7));
-        setItemSilent("melee", slot, new ShopItem(Material.DIAMOND_SWORD, 1, Material.EMERALD, 4));
+        // Les épées ne sont plus vendues ici : elles sont gérées exclusivement via l'onglet
+        // spécial "Tools" (paliers bois/pierre/fer/diamant, verrouillées au slot 1 de la hotbar).
 
         slot = 9;
         setItemSilent("armor", slot++, new ShopItem(Material.CHAINMAIL_BOOTS, 1, Material.IRON_INGOT, 40));

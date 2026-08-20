@@ -15,17 +15,20 @@ import org.bukkit.inventory.PlayerInventory;
 
 /**
  * Empêche toute manipulation des items protégés d'un joueur en partie/lobby :
- *  - l'épée en bois du kit de base (toujours au slot 0) ;
- *  - les 3 items spéciaux du lobby d'attente (diamant "forcer le lancement" au slot 0,
- *    bloc "choisir son équipe" au slot 2, barrière "quitter" au slot 4).
+ *  - les 3 outils du kit de base (épée slot 1, hache slot 2, pioche slot 3 — voir KitProtectionUtil) ;
+ *  - les 3 items spéciaux du lobby d'attente (diamant "forcer le lancement" au slot 1,
+ *    bloc "choisir son équipe" au slot 3, barrière "quitter" au slot 5).
  * Impossible de les drop, déplacer, dupliquer, échanger avec la main secondaire, ou les
  * sortir de quelque façon que ce soit tant que le joueur est en jeu/en lobby.
  */
 public class KitProtectionListener implements Listener {
 
     private final BedwarsPlugin plugin;
-    /** Slots protégés dans la hotbar (épée + items du lobby, qui ne se chevauchent jamais). */
-    private static final int[] PROTECTED_SLOTS = {0, LobbyItemUtil.SLOT_TEAM_SELECT, LobbyItemUtil.SLOT_LEAVE};
+    /** Slots protégés dans la hotbar : 0-2 (outils du kit) et 4 (bouton quitter du lobby). */
+    private static final int[] PROTECTED_SLOTS = {
+            KitProtectionUtil.SLOT_SWORD, KitProtectionUtil.SLOT_AXE, KitProtectionUtil.SLOT_PICKAXE,
+            LobbyItemUtil.SLOT_LEAVE
+    };
 
     public KitProtectionListener(BedwarsPlugin plugin) {
         this.plugin = plugin;
@@ -36,7 +39,7 @@ public class KitProtectionListener implements Listener {
     }
 
     private boolean isLocked(ItemStack item) {
-        return KitProtectionUtil.isProtectedSword(item) || LobbyItemUtil.isAnyLobbyItem(item);
+        return KitProtectionUtil.isKitTool(item) || LobbyItemUtil.isAnyLobbyItem(item);
     }
 
     @EventHandler

@@ -154,8 +154,9 @@ public class UpgradeGUIManager {
 
     private ItemStack dragonBuffItem(TeamUpgrades upgrades) {
         List<String> lore = new ArrayList<>();
-        lore.add(ChatColor.GRAY + "Fait apparaître un dragon");
-        lore.add(ChatColor.GRAY + "qui garde votre base.");
+        lore.add(ChatColor.GRAY + "Votre équipe aura un dragon");
+        lore.add(ChatColor.GRAY + "supplémentaire à la mort subite");
+        lore.add(ChatColor.GRAY + "(une fois le compteur terminé).");
         lore.add("");
         if (upgrades.isDragonBuff()) {
             lore.add(ChatColor.GREEN + "" + ChatColor.BOLD + "ACHETÉ");
@@ -206,7 +207,12 @@ public class UpgradeGUIManager {
         if (slot == SLOT_FORGE) {
             buyLevel(player, upgrades::upgradeForge, forgePrice(upgrades.getForge()), Material.DIAMOND, "Forge");
         } else if (slot == SLOT_SHARPENED) {
-            buyLevel(player, upgrades::upgradeSharpenedBlades, sharpenedPrice(upgrades.getSharpenedBlades()), Material.DIAMOND, "Sharpened Blades");
+            if (buyLevel(player, upgrades::upgradeSharpenedBlades, sharpenedPrice(upgrades.getSharpenedBlades()), Material.DIAMOND, "Sharpened Blades")) {
+                for (java.util.UUID uuid : arena.getTeams().get(holder.getTeam()).getAlivePlayers()) {
+                    org.bukkit.entity.Player member = Bukkit.getPlayer(uuid);
+                    if (member != null) instance.applySharpnessToSword(member);
+                }
+            }
         } else if (slot == SLOT_ARMOR) {
             buyLevel(player, upgrades::upgradeReinforcedArmor, armorPrice(upgrades.getReinforcedArmor()), Material.DIAMOND, "Reinforced Armor");
         } else if (slot == SLOT_MANIAC) {
@@ -215,9 +221,9 @@ public class UpgradeGUIManager {
         } else if (slot == SLOT_HEAL_POOL) {
             buyOnce(player, upgrades::buyHealPool, 3, Material.DIAMOND, "Heal Pool");
         } else if (slot == SLOT_DRAGON) {
-            if (buyOnce(player, upgrades::buyDragonBuff, 5, Material.DIAMOND, "Dragon Buff")) {
-                instance.spawnDragonGuard(holder.getTeam());
-            }
+            // Pas de spawn immédiat : le second dragon n'apparaît qu'à la mort subite
+            // (voir GameInstance#triggerSuddenDeath), une fois le compteur/les phases terminés.
+            buyOnce(player, upgrades::buyDragonBuff, 5, Material.DIAMOND, "Dragon Buff");
         } else {
             for (int i = 0; i < TRAP_SLOTS.length; i++) {
                 if (TRAP_SLOTS[i] != slot) continue;
@@ -233,19 +239,20 @@ public class UpgradeGUIManager {
         return true;
     }
 
-    private void buyLevel(Player player, java.util.function.BooleanSupplier upgrade, int price, Material currency, String name) {
+    private boolean buyLevel(Player player, java.util.function.BooleanSupplier upgrade, int price, Material currency, String name) {
         if (!EconomyUtil.hasCurrency(player, currency, price)) {
             player.sendMessage(ChatColor.RED + "Il vous manque des " + EconomyUtil.currencyName(currency, price) + " pour améliorer " + name + ".");
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 1f, 1f);
-            return;
+            return false;
         }
         if (!upgrade.getAsBoolean()) {
             player.sendMessage(ChatColor.RED + name + " est déjà au niveau maximum.");
-            return;
+            return false;
         }
         EconomyUtil.removeCurrency(player, currency, price);
         player.sendMessage(ChatColor.GREEN + name + " amélioré pour toute l'équipe !");
         player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1f, 1f);
+        return true;
     }
 
     private boolean buyOnce(Player player, java.util.function.BooleanSupplier purchase, int price, Material currency, String name) {

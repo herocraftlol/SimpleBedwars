@@ -5,6 +5,7 @@ import com.bedwars.arena.*;
 import com.bedwars.upgrade.TeamUpgrades;
 import com.bedwars.upgrade.TrapType;
 import com.bedwars.shop.ToolTier;
+import com.bedwars.shop.SwordTier;
 import com.bedwars.util.KitProtectionUtil;
 import com.bedwars.util.LobbyItemUtil;
 import org.bukkit.*;
@@ -34,6 +35,7 @@ public class GameInstance {
     private final Map<TeamColor, TeamUpgrades> teamUpgrades = new EnumMap<>(TeamColor.class);
     private final Map<UUID, Integer> pickaxeTier = new HashMap<>();
     private final Map<UUID, Integer> axeTier = new HashMap<>();
+    private final Map<UUID, Integer> swordTier = new HashMap<>();
     /** Équipe demandée par un joueur dans le lobby (voir l'item "Choisir son équipe"), avant le lancement. */
     private final Map<UUID, TeamColor> preferredTeam = new HashMap<>();
 
@@ -43,6 +45,9 @@ public class GameInstance {
     private BukkitTask mainTimerTask;
     private BukkitTask ironGoldTask;
     private final Map<Generator, BukkitTask> preciousTasks = new HashMap<>();
+    private BukkitTask forgeBonusTask;
+    private final Map<TeamColor, Long> forgeDiamondCounter = new EnumMap<>(TeamColor.class);
+    private final Map<TeamColor, Long> forgeEmeraldCounter = new EnumMap<>(TeamColor.class);
     private BukkitTask scoreboardTask;
     private BukkitTask upgradeEffectsTask;
 
@@ -177,6 +182,14 @@ public class GameInstance {
     private void startGame() {
         arena.setState(ArenaState.PLAYING);
         plugin.getWaitingLobbyManager().destroy(arena);
+        // Sécurité supplémentaire : les améliorations d'équipe repartent toujours de zéro à
+        // chaque lancement (elles le sont déjà de fait, chaque partie utilisant une instance
+        // fraîche, mais on le garantit explicitement ici).
+        teamUpgrades.clear();
+        // S'assure que les PNJ marchand/amélioration sont bien présents avant que les joueurs
+        // n'arrivent sur la map (ils peuvent avoir disparu entre la configuration et maintenant :
+        // chunk déchargé entre-temps, redémarrage du serveur, etc.).
+        plugin.getShopNpcManager().spawnForArena(arena);
         assignTeams();
 
         for (UUID uuid : arena.getWaitingPlayers()) {
@@ -195,6 +208,7 @@ public class GameInstance {
         startGenerators();
         startMainTimer();
         startUpgradeEffects();
+        startForgeBonusResources();
         scoreboardTask = Bukkit.getScheduler().runTaskTimer(plugin,
                 () -> plugin.getScoreboardManager().update(this), 0L, 20L);
 
@@ -254,14 +268,30 @@ public class GameInstance {
         player.getInventory().setLeggings(dyed(Material.LEATHER_LEGGINGS, color));
         player.getInventory().setBoots(dyed(Material.LEATHER_BOOTS, color));
 
-        // Épée en bois protégée : toujours au tout premier slot de la hotbar.
-        player.getInventory().setItem(0, KitProtectionUtil.createProtectedSword());
+        // Épée / hache / pioche : toujours aux 3 premiers slots de la hotbar (slots 1/2/3),
+        // au palier actuel du joueur (bois par défaut, voir downgradeTools). Verrouillés par
+        // KitProtectionListener : indroppables, indéplaçables, indupliquables.
+        UUID uuid = player.getUniqueId();
+        SwordTier sTier = SwordTier.byLevel(getSwordTier(uuid));
+        ToolTier aTier = ToolTier.byLevel(getAxeTier(uuid));
+        ToolTier pTier = ToolTier.byLevel(getPickaxeTier(uuid));
 
-        // Pioche/hache au palier actuel du joueur (bois par défaut, voir downgradeTools).
-        ToolTier pTier = ToolTier.byLevel(getPickaxeTier(player.getUniqueId()));
-        ToolTier aTier = ToolTier.byLevel(getAxeTier(player.getUniqueId()));
-        player.getInventory().addItem(new ItemStack(pTier.getPickaxe()));
-        player.getInventory().addItem(new ItemStack(aTier.getAxe()));
+        player.getInventory().setItem(KitProtectionUtil.SLOT_SWORD,
+                KitProtectionUtil.tagAsKitTool(new ItemStack(sTier.getMaterial()), "Épée"));
+        player.getInventory().setItem(KitProtectionUtil.SLOT_AXE,
+                KitProtectionUtil.tagAsKitTool(new ItemStack(aTier.getAxe()), "Hache"));
+        player.getInventory().setItem(KitProtectionUtil.SLOT_PICKAXE,
+                KitProtectionUtil.tagAsKitTool(new ItemStack(pTier.getPickaxe()), "Pioche"));
+
+        applySharpnessToSword(player);
+    }
+
+    public int getSwordTier(UUID uuid) {
+        return swordTier.getOrDefault(uuid, SwordTier.WOOD.getLevel());
+    }
+
+    public void setSwordTier(UUID uuid, int level) {
+        swordTier.put(uuid, level);
     }
 
     public int getPickaxeTier(UUID uuid) {
@@ -280,10 +310,43 @@ public class GameInstance {
         axeTier.put(uuid, level);
     }
 
-    /** À chaque mort (non finale), la pioche et la hache redescendent d'un palier (jamais en dessous du bois). */
+    /** À chaque mort (non finale), épée/pioche/hache redescendent d'un palier (jamais en dessous du bois). */
     private void downgradeTools(UUID uuid) {
+        swordTier.put(uuid, Math.max(SwordTier.WOOD.getLevel(), getSwordTier(uuid) - 1));
         pickaxeTier.put(uuid, Math.max(ToolTier.WOOD.getLevel(), getPickaxeTier(uuid) - 1));
         axeTier.put(uuid, Math.max(ToolTier.WOOD.getLevel(), getAxeTier(uuid) - 1));
+    }
+
+    /**
+     * Remplace le matériau de l'épée du slot protégé par le palier donné, sans perdre le
+     * verrouillage (tag) ni l'enchantement Sharpness en cours (voir applySharpnessToSword).
+     */
+    public void refreshSwordItem(Player player) {
+        SwordTier tier = SwordTier.byLevel(getSwordTier(player.getUniqueId()));
+        player.getInventory().setItem(KitProtectionUtil.SLOT_SWORD,
+                KitProtectionUtil.tagAsKitTool(new ItemStack(tier.getMaterial()), "Épée"));
+        applySharpnessToSword(player);
+    }
+
+    /**
+     * L'amélioration "Sharpened Blades" ne s'applique QUE sur l'épée du slot 1 de la hotbar
+     * (pas un effet de potion Force qui boosterait aussi les poings/autres armes) : on pose
+     * directement l'enchantement Tranchant correspondant sur cette épée précise.
+     */
+    public void applySharpnessToSword(Player player) {
+        TeamColor color = playerTeams.get(player.getUniqueId());
+        int level = 0;
+        if (color != null && teamUpgrades.containsKey(color)) {
+            level = teamUpgrades.get(color).getSharpenedBlades();
+        }
+        ItemStack sword = player.getInventory().getItem(KitProtectionUtil.SLOT_SWORD);
+        if (sword == null || !KitProtectionUtil.isKitTool(sword)) return;
+        if (level > 0) {
+            sword.addUnsafeEnchantment(org.bukkit.enchantments.Enchantment.SHARPNESS, level);
+        } else {
+            sword.removeEnchantment(org.bukkit.enchantments.Enchantment.SHARPNESS);
+        }
+        player.getInventory().setItem(KitProtectionUtil.SLOT_SWORD, sword);
     }
 
     private ItemStack dyed(Material material, TeamColor color) {
@@ -310,10 +373,11 @@ public class GameInstance {
                     Player p = Bukkit.getPlayer(uuid);
                     if (p == null) continue;
 
-                    if (upgrades.getSharpenedBlades() > 0) {
-                        p.addPotionEffect(new PotionEffect(PotionEffectType.STRENGTH,
-                                140, Math.max(0, upgrades.getSharpenedBlades() - 1), true, false));
-                    }
+                    // Sharpened Blades : contrairement aux autres effets, ne s'applique QU'à
+                    // l'épée du slot 1 de la hotbar (enchantement direct), pas un effet de
+                    // potion qui boosterait aussi les poings ou toute autre arme.
+                    applySharpnessToSword(p);
+
                     if (upgrades.getReinforcedArmor() > 0) {
                         p.addPotionEffect(new PotionEffect(PotionEffectType.RESISTANCE,
                                 140, Math.max(0, upgrades.getReinforcedArmor() - 1), true, false));
@@ -398,6 +462,10 @@ public class GameInstance {
 
     private void startGenerators() {
         ironGoldTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            // Les minerais ne doivent jamais spawn en dehors d'une partie active, ni si plus
+            // personne ne joue (sécurité en plus de l'annulation normale des tâches en fin de partie).
+            if (!isGameActive()) return;
+
             for (Generator gen : arena.getGenerators()) {
                 if (gen.getType() != GeneratorType.FER && gen.getType() != GeneratorType.OR) continue;
                 gen.incrementTick();
@@ -419,13 +487,88 @@ public class GameInstance {
         }
     }
 
-    /** Le "Forge" (Amélioration d'équipe) accélère la production des générateurs fer/or de la base de l'équipe. */
+    /** true si une partie est réellement en cours et qu'il y a au moins un joueur en jeu. */
+    private boolean isGameActive() {
+        if (arena.getState() != ArenaState.PLAYING && arena.getState() != ArenaState.SUDDEN_DEATH) return false;
+        for (UUID uuid : playerTeams.keySet()) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null && isAlivePlaying(p)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Le "Forge" (Amélioration d'équipe) accélère la production des générateurs fer/or de la
+     * base de l'équipe (voir aussi {@link #startForgeBonusResources()} pour le bonus diamant/émeraude) :
+     *  - Palier 1 : x1.25   - Palier 2 : x1.75   - Palier 3 : x2.0   - Palier 4 : x2.25
+     */
     private long applyForge(Generator gen, long baseInterval) {
         if (gen.getTeam() == null) return baseInterval;
         int forgeLevel = teamUpgrades.containsKey(gen.getTeam()) ? teamUpgrades.get(gen.getTeam()).getForge() : 0;
-        if (forgeLevel <= 0) return baseInterval;
-        double factor = Math.max(0.25, 1.0 - (forgeLevel * 0.15));
-        return Math.max(1, Math.round(baseInterval * factor));
+        double multiplier = forgeSpeedMultiplier(forgeLevel);
+        if (multiplier <= 1.0) return baseInterval;
+        return Math.max(1, Math.round(baseInterval / multiplier));
+    }
+
+    private double forgeSpeedMultiplier(int forgeLevel) {
+        return switch (forgeLevel) {
+            case 1 -> 1.25;
+            case 2 -> 1.75;
+            case 3 -> 2.0;
+            case 4 -> 2.25;
+            default -> 1.0;
+        };
+    }
+
+    /**
+     * À partir du palier 3 de la Forge, du diamant apparaît directement au point
+     * {@code ArenaTeam#getForgeLocation()} de l'équipe (1 par minute), et au palier 4 le diamant
+     * accélère à 1 toutes les 15 secondes tout en ajoutant de l'émeraude (1 toutes les 2 minutes).
+     */
+    private void startForgeBonusResources() {
+        forgeBonusTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (!isGameActive()) return;
+
+            for (Map.Entry<TeamColor, ArenaTeam> entry : arena.getTeams().entrySet()) {
+                TeamColor color = entry.getKey();
+                ArenaTeam team = entry.getValue();
+                if (team.getForgeLocation() == null) continue;
+                TeamUpgrades upgrades = teamUpgrades.get(color);
+                int forgeLevel = upgrades != null ? upgrades.getForge() : 0;
+                if (forgeLevel <= 0) continue;
+
+                long diamondInterval = forgeDiamondIntervalSeconds(forgeLevel);
+                if (diamondInterval > 0) {
+                    long count = forgeDiamondCounter.merge(color, 1L, Long::sum);
+                    if (count >= diamondInterval) {
+                        forgeDiamondCounter.put(color, 0L);
+                        dropForgeBonus(team.getForgeLocation(), Material.DIAMOND);
+                    }
+                }
+                long emeraldInterval = forgeEmeraldIntervalSeconds(forgeLevel);
+                if (emeraldInterval > 0) {
+                    long count = forgeEmeraldCounter.merge(color, 1L, Long::sum);
+                    if (count >= emeraldInterval) {
+                        forgeEmeraldCounter.put(color, 0L);
+                        dropForgeBonus(team.getForgeLocation(), Material.EMERALD);
+                    }
+                }
+            }
+        }, 20L, 20L); // vérifié toutes les secondes
+    }
+
+    private long forgeDiamondIntervalSeconds(int forgeLevel) {
+        if (forgeLevel >= 4) return 15;
+        if (forgeLevel == 3) return 60;
+        return 0;
+    }
+
+    private long forgeEmeraldIntervalSeconds(int forgeLevel) {
+        return forgeLevel >= 4 ? 120 : 0;
+    }
+
+    private void dropForgeBonus(Location loc, Material material) {
+        loc.getWorld().dropItem(loc.clone().add(0.5, 0.2, 0.5), new ItemStack(material, 1));
     }
 
     private void schedulePreciousGenerator(Generator gen) {
@@ -435,8 +578,10 @@ public class GameInstance {
         long intervalSeconds = getIntervalFor(gen.getType());
         long periodTicks = intervalSeconds * 20L;
 
-        BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, () -> spawnCappedResource(gen),
-                periodTicks, periodTicks);
+        BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (!isGameActive()) return;
+            spawnCappedResource(gen);
+        }, periodTicks, periodTicks);
         preciousTasks.put(gen, task);
     }
 
@@ -499,6 +644,39 @@ public class GameInstance {
     // Timer principal / mort subite
     // ---------------------------------------------------------------
 
+    /** Libellé de la prochaine phase et temps restant avant qu'elle démarre (pour le scoreboard). */
+    public String getPhaseCountdownLabel() {
+        if (arena.getState() == ArenaState.SUDDEN_DEATH) return "Mort subite en cours";
+
+        int durationMinutes = plugin.getConfig().getInt("game.game-duration-minutes", 45);
+        int phase2Minute = plugin.getConfig().getInt("generators.phase2-minute", 25);
+        int phase3Minute = plugin.getConfig().getInt("generators.phase3-minute", 5);
+        int totalSeconds = durationMinutes * 60;
+        int remainingSeconds = Math.max(0, totalSeconds - elapsedSeconds);
+
+        String label;
+        int targetMinuteMark;
+        if (phase == 1) {
+            label = "Phase 2";
+            targetMinuteMark = phase2Minute;
+        } else if (phase == 2) {
+            label = "Phase 3";
+            targetMinuteMark = phase3Minute;
+        } else {
+            label = "Mort subite";
+            targetMinuteMark = 0;
+        }
+
+        int secondsUntil = Math.max(0, remainingSeconds - targetMinuteMark * 60);
+        return label + ": " + formatTime(secondsUntil);
+    }
+
+    private String formatTime(int totalSeconds) {
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return String.format("%02d:%02d", minutes, seconds);
+    }
+
     private void startMainTimer() {
         int durationMinutes = plugin.getConfig().getInt("game.game-duration-minutes", 45);
         int phase2Minute = plugin.getConfig().getInt("generators.phase2-minute", 25);
@@ -546,10 +724,15 @@ public class GameInstance {
             if (team == null || team.getBedLocation() == null) continue;
             if (team.isEliminated()) continue;
             Location spawnLoc = team.getBedLocation().clone().add(0, height, 0);
-            EnderDragon dragon = (EnderDragon) spawnLoc.getWorld().spawnEntity(spawnLoc, EntityType.ENDER_DRAGON);
-            dragon.setCustomName(color.getColoredName() + " Dragon");
-            dragon.setCustomNameVisible(true);
-            dragons.add(dragon);
+            dragons.add(spawnDragonFor(color, spawnLoc));
+
+            // "Dragon Buff" (Amélioration d'équipe) : un second dragon, uniquement à la mort
+            // subite (une fois toutes les phases/le compteur terminés), pas avant.
+            TeamUpgrades upgrades = teamUpgrades.get(color);
+            if (upgrades != null && upgrades.isDragonBuff()) {
+                Location secondSpawnLoc = spawnLoc.clone().add(4, 2, 4);
+                dragons.add(spawnDragonFor(color, secondSpawnLoc));
+            }
         }
 
         // Tâche périodique : chaque dragon vise un joueur d'une autre équipe.
@@ -653,22 +836,12 @@ public class GameInstance {
         }
     }
 
-    /** Fait apparaître un dragon gardien permanent au-dessus de la base d'une équipe (achat "Dragon Buff"). */
-    public void spawnDragonGuard(TeamColor color) {
-        ArenaTeam team = arena.getTeams().get(color);
-        if (team == null || team.getBedLocation() == null) return;
-        Location spawnLoc = team.getBedLocation().clone().add(0, 6, 0);
+    /** Fait apparaître un dragon nommé d'après son équipe (utilisé par triggerSuddenDeath). */
+    private EnderDragon spawnDragonFor(TeamColor color, Location spawnLoc) {
         EnderDragon dragon = (EnderDragon) spawnLoc.getWorld().spawnEntity(spawnLoc, EntityType.ENDER_DRAGON);
-        dragon.setCustomName(color.getColoredName() + ChatColor.RESET + " Dragon gardien");
+        dragon.setCustomName(color.getColoredName() + " Dragon");
         dragon.setCustomNameVisible(true);
-
-        Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            if (dragon.isDead() || !dragon.isValid() || arena.getState() == ArenaState.ENDING) return;
-            Player target = findEnemyPlayer(color);
-            if (target != null) {
-                dragon.setTarget(target);
-            }
-        }, 0L, 60L);
+        return dragon;
     }
 
     public void toSpectator(Player player) {
@@ -746,6 +919,7 @@ public class GameInstance {
         groundItems.clear();
         pickaxeTier.clear();
         axeTier.clear();
+        swordTier.clear();
         preferredTeam.clear();
         elapsedSeconds = 0;
         phase = 1;
@@ -759,6 +933,7 @@ public class GameInstance {
         if (ironGoldTask != null) ironGoldTask.cancel();
         if (scoreboardTask != null) scoreboardTask.cancel();
         if (upgradeEffectsTask != null) upgradeEffectsTask.cancel();
+        if (forgeBonusTask != null) forgeBonusTask.cancel();
         for (BukkitTask task : preciousTasks.values()) task.cancel();
     }
 
