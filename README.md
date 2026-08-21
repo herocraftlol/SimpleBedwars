@@ -1,33 +1,43 @@
-# 🎮 SimpleBedwars — Paper 1.21+
+# BedwarsPlugin — Paper 1.21
 
-**Plugin BedWars complet, configurable en jeu et sans aucune dépendance externe** pour serveur Minecraft Paper 1.21+.
+**BedwarsPlugin** est un plugin BedWars complet pour serveurs **Paper 1.21+**, entièrement
+configurable en jeu via la commande `/bd` : création et clonage d'arènes, équipes
+personnalisables, générateurs de ressources, shop et améliorations d'équipe façon Hypixel,
+PNJ vendeurs à skin de joueur, lobby d'attente flottant, pièges, mort subite avec dragons —
+le tout **sans aucune dépendance externe**.
 
-SimpleBedwars transforme ton serveur Paper en une plateforme BedWars clé en main. Tout se configure
-**directement en jeu** via la commande `/bd` — aucune édition de fichiers ni recompilation pour ajuster
-tes arènes, ton shop ou tes améliorations d'équipe. Le gameplay reprend les codes classiques du BedWars :
-plusieurs équipes, des lits à protéger, des générateurs de ressources (fer, or, diamant, émeraude), un
-shop par équipe, des améliorations partagées, des pièges défensifs et une phase de **mort subite** avec
-dragons.
+## ✨ Nouveautés de la v1.0.16
 
-> 🔧 Aucune dépendance requise. ProtocolLib et Citizens ne sont **pas** nécessaires.
+- **TNT façon Hypixel** : elle s'amorce toute seule dès qu'elle est posée (plus besoin de
+  briquet), et son explosion ne détruit **que les blocs posés par les joueurs** pendant la
+  partie — jamais la structure d'origine de la map.
+- **Forge rééquilibrée** : les minerais ne sont plus envoyés directement dans l'inventaire
+  des joueurs, ils restent au sol à l'emplacement de la Forge — il faut aller les ramasser.
+  La vitesse de base fer/or est divisée par deux (fer : 1/2 s, or : 1/4 s) et un plafond au
+  sol évite l'accumulation infinie (24 fer / 12 or de base, +8/+4 par palier, illimité au
+  palier 4).
+- **Hologrammes de générateurs** : chaque générateur de diamant/émeraude affiche en temps
+  réel le compte à rebours avant le prochain spawn et son palier en chiffres romains
+  (ex : « Diamant II — 12 s »), synchronisé avec les phases d'accélération avant la mort
+  subite. Le palier actuel est aussi visible dans le scoreboard.
+- **Respawn avec compte à rebours** : après une mort non finale, le joueur passe en
+  spectateur pendant 5 secondes (compte à rebours affiché en grand à l'écran) puis
+  réapparaît automatiquement au spawn de son équipe.
 
 ## 📦 Installation
 
-1. Télécharge le fichier `BedwarsPlugin-1.0.15.jar` depuis la [dernière release](https://github.com/herocraftlol/SimpleBedwars/releases/latest).
-2. Place le `.jar` dans le dossier `plugins/` de ton serveur Paper 1.21+.
-3. Redémarre le serveur.
-4. Configure tes arènes avec les commandes `/bd ...` (voir ci-dessous).
+1. Téléchargez `BedwarsPlugin.jar` depuis la [dernière release](../../releases/latest).
+2. Placez-le dans le dossier `plugins/` de votre serveur Paper 1.21+.
+3. Redémarrez le serveur, puis créez votre première arène avec `/bd create <nom>`.
 
-## 🛠️ Compilation depuis les sources
+## 🔧 Compilation depuis les sources
 
 ```bash
-git clone https://github.com/herocraftlol/SimpleBedwars.git
-cd SimpleBedwars
 mvn clean package
 ```
 
-Le jar final apparaît dans `target/BedwarsPlugin.jar` (le `pom.xml` inclut déjà le dépôt PaperMC et le
-shade-plugin). Compilation vérifiée et réussie avec Maven + Paper 1.21.1 API (Java 21).
+Le jar final apparaît dans `target/BedwarsPlugin.jar` (le `pom.xml` inclut le dépôt PaperMC
+et le shade-plugin). Nécessite un JDK 21+ et Maven.
 
 ## Commandes
 
@@ -39,7 +49,7 @@ shade-plugin). Compilation vérifiée et réussie avec Maven + Paper 1.21.1 API 
 /bd arene gui                                        (affiche directement le GUI des arènes)
 /bd arene clean                                      (purge les PNJ marchand/amélioration fantômes)
 /bd join <nom>
-/bd spectate <nom>                                  (rejoint une partie en cours en spectateur)
+/bd spectate <nom>
 /bd leave
 /bd list
 /bd <nom> equipe <2/4/6/8> <joueurs par équipe>
@@ -47,15 +57,16 @@ shade-plugin). Compilation vérifiée et réussie avec Maven + Paper 1.21.1 API 
 /bd <nom> bed <couleur>
 /bd <nom> spawn <couleur>
 /bd <nom> item <diamand|emeraude>                    (générateurs communs de la map)
-/bd <nom> forge <couleur>                            (crée la forge de l'équipe : générateurs fer+or + bonus Forge)
-/bd <nom> geninfo                                     (liste tous les générateurs pour diagnostiquer)
-/bd <nom> reset                                       (réinitialise immédiatement l'arène, même en pleine partie)
+/bd <nom> forge <couleur>                            (crée fer+or de l'équipe, accélérés par l'amélioration Forge)
+/bd <nom> geninfo                                    (liste les générateurs pour diagnostiquer)
+/bd <nom> reset                                      (réinitialise immédiatement, même en pleine partie)
 /bd <nom> shop <shop|upgrade> color <couleur> [pseudo]   (pseudo optionnel = skin du PNJ)
 /bd <nom> spec                                       (= aussi le centre du lobby d'attente flottant)
 /bd <nom> specspawn                                  (spawn spectateurs pendant la partie, ex: milieu de la map)
 /bd <nom> minplayers <nombre|off>                    (seuil pour lancer le compte à rebours)
+/bd <nom> edit                                       (= config, réactive la modification libre de la map)
 /bd <nom> save
-/bd <nom> config   (alias : edit — repasse l'arène en mode édition libre de la map)
+/bd <nom> config
 ```
 
 Permission `bedwars.admin` (op par défaut) pour tout ce qui configure/supprime une arène ;
@@ -64,12 +75,12 @@ Permission `bedwars.admin` (op par défaut) pour tout ce qui configure/supprime 
 ## Nouveautés de cette itération
 
 - **PNJ Marchand / Amélioration** (`ShopNpcManager`) : placés via `/bd <nom> shop <shop|upgrade> color <couleur> [pseudo]`,
-  ce sont désormais des mobs immobiles (Zombie, IA/bruit/dégâts/combustion désactivés) habillés
-  d'une tête de joueur et d'une armure de cuir teintée à la couleur de l'équipe. Un clic n'importe
-  où sur le PNJ ouvre le bon menu, de façon garantie. Si un pseudo Minecraft est fourni, son skin
-  réel est récupéré de façon asynchrone (API Mojang via `PlayerProfile#update`) et appliqué à la
-  tête. Sans pseudo, la tête reste neutre (aucun appel réseau). C'est la meilleure approximation
-  d'un « vrai NPC joueur » sans plugin tiers (Citizens) ni paquets réseau bruts.
+  ce sont des mobs immobiles (Zombies déguisés, IA désactivée, voir "Correction de bug (v7)" plus bas)
+  en armure de cuir teintée à la couleur de l'équipe, avec une tête de joueur. Si un pseudo Minecraft
+  est fourni, son skin réel est récupéré de façon asynchrone (API Mojang via `PlayerProfile#complete`)
+  et appliqué à la tête. Sans pseudo, la tête reste neutre (aucun appel réseau). Voir la remarque
+  "vrai NPC joueur" ci-dessous : c'est la meilleure approximation possible sans plugin tiers (Citizens)
+  ni paquets réseau bruts.
 - **Shop d'équipe** (`com.bedwars.shop`) : clic sur le Marchand ouvre un GUI avec des onglets en haut.
   Depuis la v3, le contenu (catégories/articles/prix) est entièrement configurable en jeu via
   `/bd shop ...` (voir "Nouveautés de cette itération (v3)" plus haut) — ce paragraphe historique
@@ -168,13 +179,223 @@ pouvoir reconfigurer les prix de l'amélioration en jeu, dis-le moi, j'ajouterai
   - **Slot 5 : bloc barrière "Quitter la partie"** — équivalent de `/bd leave`, renvoie le joueur au
     spawn du monde.
 
+## Corrections de bugs (v6)
+
+- **Les PNJ Marchand/Amélioration ne se dupliquent plus au redémarrage.** La cause : ils étaient
+  marqués persistants (`setPersistent(true)`), donc sauvegardés par Minecraft dans le monde ; au
+  redémarrage, le plugin les respawnait quand même par-dessus (son registre interne, lui, est remis
+  à zéro à chaque démarrage) — d'où des doublons qui s'accumulaient à chaque redémarrage, invisibles
+  jusqu'à ce que leur chunk se recharge. Corrigé : ces PNJ ne sont plus persistants (c'est le plugin
+  qui les fait toujours réapparaître lui-même au démarrage, `setPersistent(false)` suffit), et avant
+  chaque apparition, le chunk concerné est chargé puis purgé de tout PNJ résiduel marqué par notre
+  tag interne — ce qui nettoie aussi, une bonne fois pour toutes, les doublons déjà accumulés par les
+  versions précédentes. Une commande **`/bd arene clean`** a aussi été ajoutée pour relancer ce
+  nettoyage à la demande, sans avoir à redémarrer le serveur.
+- **Le PNJ "hub" (ancien `/bd admin gui`, remplacé par `/bd arene gui`) est définitivement supprimé.**
+  Comme il n'est plus utilisé, `AdminNPCManager` ne le respawn plus jamais : au premier démarrage
+  après cette mise à jour, tout PNJ hub encore présent dans le monde est retrouvé (chunk chargé de
+  force) et supprimé, puis son fichier de sauvegarde (`npc.yml`) est effacé pour de bon.
+- **Une arène déjà sauvegardée (`/bd <nom> save`) n'apparaît plus "non configurée" après un
+  redémarrage du serveur.** La cause : l'état runtime de l'arène (WAITING/SETUP/...) n'était en fait
+  jamais sauvegardé dans le fichier de configuration — au rechargement, chaque arène repartait donc
+  systématiquement sur la valeur par défaut du code (SETUP), même si elle avait été correctement
+  sauvegardée. Corrigé : au chargement, une arène marquée comme sauvegardée (`saved: true`) est
+  maintenant remise en état `WAITING` (disponible, ouverte) automatiquement — plus besoin de refaire
+  `/bd <nom> save` après chaque redémarrage.
+
+## Correction de bug (v7) : les PNJ Marchand/Amélioration n'ouvraient pas toujours le GUI au clic
+
+Cause : ces PNJ étaient des **Armor Stands**, qui utilisent un événement de clic différent et
+"positionnel" (`PlayerInteractAtEntityEvent`, qui dépend de l'endroit précis cliqué sur le corps
+pour gérer l'équipement d'armure) — peu fiable pour garantir l'ouverture d'un menu à chaque clic.
+
+Corrigé : ils sont maintenant des **Zombies déguisés** (IA désactivée, invulnérables, silencieux,
+ne prennent pas feu au soleil, ne poussent pas les joueurs), habillés d'une tête de joueur et
+d'une armure en cuir teintée à la couleur de l'équipe — un mob classique déclenche toujours
+l'événement standard et fiable `PlayerInteractEntityEvent`, peu importe où on clique dessus.
+Toute la logique anti-duplication (v6) a été conservée à l'identique sur ce nouveau type d'entité.
+
+## Nouveautés / corrections (v8)
+
+- **Le bug de l'arène "non configurée" au redémarrage est cette fois vraiment corrigé.** Cause
+  réelle trouvée : il restait une ligne orpheline (`arena.setState(ArenaState.SETUP)`) tout à la
+  fin de `ArenaManager#loadArena`, qui écrasait silencieusement le correctif de la version
+  précédente juste avant l'enregistrement en mémoire. Supprimée.
+- **Les minerais ne spawn plus jamais en dehors d'une partie réellement active** : garde-fous
+  ajoutés sur tous les générateurs (fer/or, diamant/émeraude, bonus de Forge) — rien ne se
+  déclenche si l'arène n'est pas en `PLAYING`/`SUDDEN_DEATH`, ni si plus aucun joueur n'est
+  effectivement en jeu.
+- **Toutes les améliorations d'équipe repartent à zéro à chaque partie** (déjà vrai de fait grâce à
+  l'instance de partie fraîche à chaque lancement, désormais aussi garanti explicitement en début
+  de partie).
+- **`/bd <nom> forge <couleur>`** : nouvelle commande qui définit l'ancre de la "forge de base"
+  d'une équipe. `/bd <nom> item <fer|or|diamand|emeraude> [couleur]` accepte maintenant une couleur
+  d'équipe optionnelle pour lier un générateur fer/or à une équipe — **c'est ce qui manquait pour
+  que la Forge fonctionne** : avant cette version, aucun générateur n'était jamais rattaché à une
+  équipe, donc l'amélioration Forge n'avait littéralement aucun effet.
+- **Paliers de la Forge, implémentés exactement comme demandé** :
+  - Palier 1 : fer/or **x1,25** plus rapide
+  - Palier 2 : fer/or **x1,75** plus rapide
+  - Palier 3 : fer/or **x2** plus rapide, + **diamant** au point `forge` de l'équipe (1 toutes les 60s)
+  - Palier 4 : fer/or **x2,25** plus rapide, diamant **toutes les 15s**, + **émeraude toutes les 2 minutes**
+- **Dragon Buff repensé** : n'apparaît plus immédiatement à l'achat. Il donne désormais un **second
+  dragon**, uniquement à la mort subite (une fois le compteur et toutes les phases terminés), pour
+  les équipes qui l'ont acheté.
+- **Épée/hache/pioche à slots fixes et verrouillés** : épée toujours au slot 1, hache au slot 2,
+  pioche au slot 3 de la hotbar — indroppables, indéplaçables, indupliquables (`KitProtectionUtil`
+  généralisé aux 3 outils). L'épée a maintenant ses propres paliers (Bois → Pierre → Fer → Diamant,
+  achetables dans l'onglet "Tools" du shop, à côté de pioche/hache) et redescend d'un palier à
+  chaque mort comme les deux autres (le palier bois reste toujours acquis).
+- **Sharpened Blades ciblé** : n'applique plus un effet de potion Force (qui boostait aussi les
+  poings et toute autre arme) mais pose directement l'enchantement Tranchant correspondant sur
+  l'épée du slot 1 de chaque membre de l'équipe qui l'a acheté.
+- **Mode édition** : `/bd <nom> edit` (alias de `config`) remet l'arène en configuration, combiné à
+  un contournement explicite dans la protection anti-casse de bloc qui laisse un admin construire
+  librement tant que l'arène est en `SETUP`.
+- **`/bd spectate <nom>`** : commande dédiée pour rejoindre une partie en cours en spectateur (en
+  plus du clic dans le GUI, qui fonctionnait déjà).
+- **Les PNJ marchand/amélioration réapparaissent systématiquement au lancement de la partie**
+  (`spawnForArena` appelé explicitement dans `startGame()`), même s'ils avaient disparu entre la
+  configuration et le lancement (chunk déchargé, etc.).
+- **Scoreboard** : nouvelle ligne affichant le temps restant avant la prochaine phase (Phase 2,
+  Phase 3, ou Mort subite selon l'avancement de la partie). Déjà scopé uniquement aux joueurs et
+  spectateurs de l'arène concernée (jamais affiché à qui que ce soit d'autre), déjà visible aux
+  spectateurs (la liste des participants d'une partie inclut déjà les spectateurs).
+
+### Notes / limites
+
+- **`/bd copy`** (ajouté à une itération précédente) copie déjà toute la configuration d'une arène
+  (zone de jeu, lits, spawns, PNJ shop/upgrade, générateurs) en la translatant vers un nouvel
+  emplacement. Les **coffres et leur contenu** ne sont en revanche pas copiés spécifiquement : la
+  capture de région (`RegionSchematic`) sauvegarde le type de chaque bloc mais pas le contenu des
+  coffres (inventaire). Dis-moi si tu veux que j'ajoute la copie du contenu des coffres.
+- **Mode édition** : je n'ai pas trouvé de restriction de construction générale dans le code (seule
+  la casse de bloc était bloquée, et seulement pour un joueur déjà "participant" d'une partie) — le
+  nouveau contournement explicite couvre ce cas précis. Si le problème vient d'ailleurs (un autre
+  plugin de protection de terrain, un mauvais gamemode, etc.), dis-le moi.
+
+## Simplification (v9) : la Forge remplace `item fer/or`
+
+- **`/bd <nom> item`** ne gère plus que `diamand` et `emeraude` (générateurs communs de la map).
+- **`/bd <nom> forge <couleur>`** crée maintenant directement, au même endroit, les générateurs de
+  fer ET d'or de l'équipe (plus besoin de faire `/bd <nom> item fer/or <couleur>` en plus) : une
+  seule commande pour toute la base de ressources d'une équipe. Relancer `/bd <nom> forge <couleur>`
+  déplace la forge (et ses générateurs fer/or) au nouvel endroit, en retirant proprement les anciens.
+- **`/bd <nom> save`** exige maintenant qu'une forge soit définie pour chaque équipe (au lieu d'exiger
+  globalement "au moins un générateur de fer" et "au moins un générateur d'or", ce qui pouvait être
+  rempli sans qu'aucune équipe n'ait de fer/or accéléré par son amélioration Forge — d'où le blocage
+  que tu rencontrais).
+
+## À propos du signalement "la forge ne donne pas d'items" (v10)
+
+J'ai relu très attentivement toute la chaîne (création des générateurs par `/bd <nom> forge`,
+persistance, boucle de tick, calcul d'intervalle, distribution aux joueurs) et je n'ai pas trouvé
+de bug qui empêcherait totalement le spawn — la logique tient debout sur le papier. Ceci dit, j'ai
+identifié et corrigé un vrai problème de **timing** : l'or était réglé par défaut sur 4 secondes
+(`gold-interval-ticks: 80`) au lieu des 2 secondes demandées. Corrigé à `40` (2s) ; le fer était
+déjà à 1 seconde (`iron-interval-ticks: 20`), inchangé.
+
+**Important** : si tu as déjà un fichier `config.yml` généré sur ton serveur (dans
+`plugins/BedwarsPlugin/`), remplacer le plugin ne suffira pas — Bukkit ne réécrit jamais un
+`config.yml` déjà existant. Il faut soit supprimer ce fichier (il sera régénéré avec les nouvelles
+valeurs au redémarrage), soit éditer manuellement la ligne `gold-interval-ticks` toi-même.
+
+J'ai aussi ajouté deux choses pour t'aider à diagnostiquer/confirmer que ça fonctionne bien :
+- **`/bd <nom> geninfo`** : liste tous les générateurs de l'arène (type, équipe assignée, position)
+  — vérifie que ta forge a bien créé un générateur FER et un OR avec la bonne équipe.
+- **Un son de ramassage** joue désormais à chaque fois qu'un générateur fer/or donne un item à un
+  joueur à proximité (rayon élargi de 4 à 6 blocs), pour que ce soit immédiatement perceptible.
+
+Si après ça le problème persiste, dis-moi précisément : est-ce qu'aucun item n'apparaît du tout
+(même en te tenant littéralement à l'endroit où tu as fait `/bd <nom> forge`), ou est-ce plus lent
+que prévu ? Le résultat de `/bd <nom> geninfo` m'aiderait aussi beaucoup à confirmer si le problème
+vient de la configuration (générateur manquant/mal placé) ou du code.
+
+## Nouveautés (v11)
+
+- **`/bd leave` (et le bouton "Quitter" du lobby) fait vraiment quitter l'arène** : en plus de
+  sortir du lobby d'attente, si le joueur était en train de jouer, il est retiré de son équipe et
+  son scoreboard disparaît immédiatement (`GameInstance#handlePlayerLeave`). Une déconnexion pure
+  et simple du serveur (`PlayerQuitEvent`) déclenche désormais exactement le même nettoyage complet
+  (avant, seule la sortie du lobby d'attente était gérée).
+- **Victoire automatique si une seule équipe a encore des joueurs** : que ce soit parce que le lit
+  d'une équipe a été détruit et son dernier joueur tué, OU parce que tous ses joueurs ont quitté
+  volontairement la partie (peu importe l'état de son lit), la condition de victoire est vérifiée
+  de la même façon à chaque fois — dès qu'il ne reste plus qu'une équipe avec des joueurs, elle
+  gagne automatiquement.
+- **`/bd <nom> reset`** : réinitialise immédiatement une arène, peu importe son état (lobby
+  d'attente, compte à rebours, partie en cours, mort subite...) — tous les joueurs et spectateurs
+  sont renvoyés au spawn du monde, la map est entièrement restaurée à son état sauvegardé, et
+  l'arène redevient aussitôt disponible pour une nouvelle partie.
+
+## Nouveautés / corrections (v12)
+
+- **Bug critique corrigé : impossible de casser le lit adverse.** Cause trouvée : `/bd <nom> bed
+  <couleur>` enregistrait la position **du joueur qui tape la commande**, pas celle du bloc du lit
+  lui-même. Sauf à se tenir exactement à l'intérieur du lit au moment de la commande (ce qui n'était
+  précisé nulle part), la position stockée ne correspondait jamais exactement au bloc du lit, donc au
+  moment de le casser en jeu, le code ne le reconnaissait pas comme un lit et le traitait comme un
+  bloc de map normal (protégé, non cassable). Corrigé : la commande vise maintenant directement le
+  bloc du lit regardé (raytrace jusqu'à 10 blocs), avec vérification que c'est bien un lit — le
+  fonctionnement attendu est maintenant garanti : lit intact = respawn illimité, lit détruit = mort
+  définitive au prochain décès, plus aucune équipe adverse = victoire automatique (déjà en place).
+- **Répartition des équipes dans le lobby** : déjà logique (2 joueurs → toujours deux équipes
+  différentes ; 4+ → répartition équilibrée). Ajout : si le nombre de joueurs est impair, quelle
+  équipe récupère le joueur "en trop" est maintenant tirée au sort (avant, c'était toujours la même
+  équipe qui héritait du surplus).
+- **Les dragons sont supprimés au début ET à la fin de chaque partie** (`GameInstance#killAllDragons`),
+  pour éviter qu'un dragon oublié d'une mort subite précédente ne traîne dans une nouvelle partie.
+- **Zone de spawn de la Forge réduite à 3x3** : les ressources de la Forge (fer/or/diamant/émeraude)
+  apparaissent désormais dispersées aléatoirement dans une zone de 3x3 blocs autour du point `forge`,
+  plutôt que toujours exactement au même endroit.
+- **Mort instantanée en sortant de la zone par en dessous** : plus besoin d'attendre de tomber dans
+  le vide du monde — dès qu'un joueur passe sous la limite basse de la zone de jeu (`pos1`/`pos2`),
+  il meurt immédiatement (mort normale ou définitive selon l'état de son lit, comme toute autre mort).
+- **Compte à rebours du lobby porté à 30 secondes** par défaut (`game.countdown-lobby-seconds`).
+- **On peut de nouveau réorganiser son propre inventaire pendant que le shop/l'amélioration est
+  ouvert** : seuls les clics dans le GUI du shop lui-même (et le shift-click, qui enverrait l'objet
+  directement dedans) sont bloqués ; les outils protégés du kit restent verrouillés comme avant.
+- **`/bd <nom> specspawn`** : nouveau point de spawn dédié aux spectateurs pendant la partie
+  (typiquement le milieu de la map), utilisé en priorité par rapport à `spec` (qui reste le centre du
+  lobby d'attente flottant). Les joueurs éliminés définitivement y sont téléportés et ne peuvent plus
+  en sortir (comme avant, la contention aux abords de ce point est automatique).
+- **En fin de partie, chaque joueur est retéléporté exactement là où il se trouvait juste avant son
+  tout premier `/bd join`** (ou `/bd arene gui` → clic sur une arène), au lieu du spawn spectateur de
+  l'arène. Fonctionne aussi bien pour une fin de partie normale que pour un `/bd leave` avant même
+  que la partie ne démarre.
+
+## Nouveautés (v13)
+
+- **La TNT s'amorce toute seule dès qu'elle est posée** (pas besoin de silex et acier, comme sur
+  Hypixel Bedwars), et **son explosion ne peut casser que les blocs posés par les joueurs pendant
+  la partie** — jamais la structure d'origine de la map (`TntListener`).
+- **Les minerais de la Forge restent uniquement là où elle a été définie** : ils ne sont plus jamais
+  "envoyés" directement dans l'inventaire des joueurs à proximité, contrairement à un générateur
+  commun — il faut aller les ramasser au sol, comme demandé.
+- **Vitesse de base du fer/or divisée par deux** (fer : 1 toutes les 2 secondes au lieu d'une ;
+  or : 1 toutes les 4 secondes au lieu de 2) — les multiplicateurs de palier de Forge (x1.25 / x1.75
+  / x2 / x2.25) s'appliquent toujours de la même façon par-dessus, donc l'accélération relative
+  reste cohérente, juste calée sur cette nouvelle base plus lente.
+- **Plafond au sol du fer/or de la Forge** : 24 fer / 12 or de base, qui augmente de +8 fer / +4 or à
+  chaque palier de Forge, jusqu'à devenir illimité au dernier palier (4) — évite que les ressources
+  s'accumulent indéfiniment si personne ne vient les ramasser, tout en récompensant la Forge upgradée.
+- **Hologramme au-dessus de chaque générateur de diamant/émeraude** : affiche en temps réel le
+  temps restant avant le prochain spawn ainsi que le palier actuel en chiffres romains (ex: "Diamant
+  II - 12s"), qui correspond aux paliers d'accélération avant la mort subite (Phase 1/2/3). Le palier
+  actuel est aussi indiqué dans le scoreboard de la partie.
+- **Compte à rebours de 5 secondes après chaque mort non-finale** : le joueur passe en spectateur
+  (peut observer la partie), un compte à rebours s'affiche en gros à l'écran (title), puis il
+  réapparaît automatiquement à son spawn d'équipe à la fin — au lieu d'un respawn instantané.
+
 ## Choix faits / hypothèses (à valider avec toi)
 
 - **Vrai "NPC joueur"** : Paper/Bukkit ne permet nativement d'afficher une silhouette de joueur (skin
-  complet, tête + corps) qu'à travers un Armor Stand habillé (ce que j'ai fait) ou via des paquets réseau
-  bruts / un plugin comme Citizens pour une vraie fausse-entité "Joueur". J'ai choisi l'Armor Stand car
-  il ne demande aucune dépendance externe et reste entièrement stable dans le temps (contrairement à du
-  code bas niveau lié à une version précise du serveur).
+  complet, tête + corps) qu'à travers un Armor Stand habillé, un mob déguisé (ce que j'ai fait, voir
+  "Correction de bug (v7)"), ou via des paquets réseau bruts / un plugin comme Citizens pour une vraie
+  fausse-entité "Joueur". J'ai d'abord choisi l'Armor Stand, puis basculé vers un Zombie déguisé (IA
+  désactivée) car le clic dessus n'ouvrait pas toujours le GUI de façon fiable. Aucun des deux ne
+  demande de dépendance externe et reste stable dans le temps (contrairement à du code bas niveau lié
+  à une version précise du serveur).
 - **Économie du shop/améliorations** : par simplicité, le prix est prélevé dans l'inventaire du joueur
   qui clique sur "Acheter", pas dans une "banque d'équipe" partagée comme sur Hypixel (où n'importe quel
   coéquipier peut compléter l'achat d'un autre). Les effets des améliorations (Forge, Sharpened Blades,
@@ -220,351 +441,3 @@ com.bedwars
  ├─ scoreboard/                 (scoreboard en jeu)
  └─ util/                       (Location <-> YAML, sauvegarde de région, lits, économie)
 ```
-
-## 🎁 Fonctionnalités
-
-- 🏰 **Création & configuration d'arènes** en jeu (équipes 2/4/6/8, spawns, lits, générateurs, PNJ).
-- 📋 **Clonage d'arènes** (`/bd copy`) pour dupliquer une map complète instantanément.
-- 🖥️ **Menu d'arènes direct** (`/bd arene gui`) pour rejoindre une partie en un clic.
-- ⚔️ **Gameplay complet** : générateurs de ressources évolutifs, système de lits, mort subite avec dragons.
-- 🛒 **Shop 100 % configurable en jeu** (`/bd shop ...`), sauvegardé dans `shop.yml`.
-- 🔧 **Améliorations d'équipe façon Hypixel** : Forge, Lames aiguisées, Armure renforcée, Mineur maniaque, Bassin de soin, Buff du dragon et 3 pièges.
-- 🧰 **Onglet Tools** : pioche & hache à 4 paliers (Bois → Fer → Or → Diamant), avec perte d'un palier à chaque mort.
-- 🎨 **PNJ Marchand/Amélioration** à apparence de joueur, armure teintée à l'équipe, skin asynchrone, clic 100 % fiable (sans dépendance externe).
-- 🪄 **Lobby flottant automatique** (cage BARRIER invisible) centré sur le point spectateur.
-- 🛡️ **Épée en bois protégée** (non jetable/échangeable) au slot 1 de la hotbar.
-- 🎨 **Couleurs d'équipe génériques** : recoloration automatique des blocs colorés.
-- 🖥️ **GUI d'admin paginé** + menu joueur avec codes couleur par statut.
-- 📊 **Scoreboard dynamique** et réinitialisation automatique de la map après chaque partie.
-- ♻️ **Réinitialisation d'arène à la demande** (`/bd <nom> reset`), même en pleine partie.
-- 🏆 **Victoire automatique** dès qu'il ne reste plus qu'une seule équipe en jeu.
-
-## 🆕 Nouveautés de la version 1.0.15
-
-Itération **confort des joueurs & nettoyage de fin de partie** : les joueurs sont renvoyés là où
-ils étaient avant d'avoir rejoint, les dragons de mort subite ne traînent plus entre deux parties,
-et plusieurs détails de gameplay deviennent plus justes et plus agréables.
-
-### 🏠 Retour à la position d'origine en fin de partie
-- La position de chaque joueur est mémorisée lors de son `/bd join` ; à la fin de la partie, lors
-  d'un `/bd leave`, du bouton « Quitter » du lobby ou d'un `/bd reset`, chacun est téléporté
-  **là où il se trouvait avant d'avoir rejoint** (et plus au spawn du monde). Repli vers le spawn
-  du monde si aucune position n'est connue.
-
-### 👁️ Nouvelle commande `/bd <nom> specspawn`
-- Définit un **point de spawn dédié pour les spectateurs éliminés définitivement** pendant la
-  partie — typiquement le milieu de la map — d'où ils pourront observer le jeu sans gêner les
-  joueurs encore vivants. Si non défini, on retombe sur le point `spec` (centre du lobby
-  d'attente). Sauvegardé dans la config de l'arène, recopié par `/bd copy`, et pris en compte
-  par la protection de déplacement des spectateurs.
-
-### 🛏️ `/bd <nom> bed <couleur>` enfin fiable
-- Le lit enregistré est désormais celui **visé directement** (raytrace jusqu'à 10 blocs), et plus
-  la position du joueur qui tape la commande — sinon aucun lit cassé en jeu ne correspondait à
-  une position enregistrée, et le bloc était traité comme un bloc protégé ordinaire. Un message
-  d'aide s'affiche si aucun lit n'est visé.
-
-### 🐉 Dragons de mort subite nettoyés entre les parties
-- Les dragons et leur boucle de ciblage sont **explicitement supprimés en fin de partie**, et une
-  sécurité supplémentaire les nettoie aussi **avant le lancement** de chaque nouvelle partie :
-  plus jamais de dragons résiduels traînant sur la map.
-
-### ⚖️ Répartition d'équipes plus juste
-- Le point de départ du tour de répartition des joueurs sans préférence est **randomisé** : si le
-  nombre de joueurs est impair, quelle équipe récupère le joueur « en trop » est tiré au hasard
-  (et plus toujours la première équipe de la liste).
-
-### 🎒 Shop : on peut réorganiser son inventaire pendant ses achats
-- Les clics dans **l'inventaire du joueur** pendant que le shop (ou le menu des pièges) est ouvert
-  sont désormais autorisés ; seul le shift-click, qui pousserait l'item dans le GUI, est bloqué.
-
-### 💥 Sortir de la zone par le bas = mort instantanée
-- Un joueur vivant qui passe sous la zone de jeu (pos1/pos2) par **en dessous** est éliminé
-  immédiatement — plus besoin d'attendre de tomber dans le vide du monde.
-
-### ⛏️ Bonus de forge dispersés
-- Les diamants/émeraudes de l'amélioration **Forge**, ainsi que les items des générateurs de forge
-  lorsqu'aucun joueur n'est à proximité, tombent désormais **dispersés dans une zone de 3x3 blocs**
-  autour de l'ancre, au lieu d'un unique point fixe.
-
-### ⏱️ Compte à rebours du lobby plus confortable
-- La durée par défaut passe de **10 à 30 secondes** (`game.countdown-lobby-seconds` dans
-  `config.yml` — supprime ton ancien fichier pour que la nouvelle valeur s'applique).
-
-### ✅ Compilation
-- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
-- Le jar `BedwarsPlugin-1.0.15.jar` est compilé et prêt à l'emploi.
-
-### 🔄 Mise à jour
-- Numéro de version porté à **1.0.15** (`pom.xml` + `plugin.yml`).
-- README mis à jour (nouveautés 1.0.15, liste des commandes).
-
-## 📜 Historique — version 1.0.14
-
-Itération **qualité de vie & fiabilité** : quitter une partie fait maintenant vraiment quitter la
-partie, une arène peut être réinitialisée à tout moment, et la victoire est détectée
-automatiquement quand il ne reste qu'une équipe.
-
-### 🚪 `/bd leave` (et le bouton « Quitter » du lobby) fait vraiment quitter l'arène
-- En plus de sortir du lobby d'attente, un joueur **en pleine partie** est retiré de son équipe et
-  son scoreboard disparaît immédiatement.
-- Une **déconnexion** du serveur déclenche désormais exactement le même nettoyage complet (avant,
-  seule la sortie du lobby d'attente était gérée — un joueur déconnecté restait « fantôme » dans
-  son équipe).
-
-### 🏆 Victoire automatique dès qu'une seule équipe reste en jeu
-- Que le dernier joueur d'une équipe soit **éliminé** (lit détruit + mort finale) ou que toute
-  l'équipe ait **quitté volontairement** la partie, la condition de victoire est vérifiée de la
-  même façon : dès qu'il ne reste plus qu'une équipe avec des joueurs, elle gagne automatiquement.
-
-### ♻️ `/bd <nom> reset` : réinitialisation immédiate d'une arène
-- Fonctionne **quel que soit l'état** de l'arène (lobby d'attente, compte à rebours, partie en
-  cours, mort subite…).
-- Tous les joueurs et spectateurs sont renvoyés au spawn du monde, la map est **entièrement
-  restaurée** à son état sauvegardé, et l'arène redevient aussitôt disponible pour une nouvelle
-  partie.
-
-### 🔍 `/bd <nom> geninfo` : diagnostic des générateurs
-- Liste tous les générateurs de l'arène (type, équipe assignée, position) — idéal pour vérifier
-  qu'une forge a bien créé ses générateurs fer/or avec la bonne équipe.
-
-### ⛏️ Générateurs plus réactifs
-- L'**or** apparaît désormais toutes les **2 secondes** par défaut (`gold-interval-ticks: 40`,
-  contre 4 s auparavant) ; le fer reste à 1 seconde.
-- Le rayon de ramassage autour des générateurs fer/or passe de **4 à 6 blocs**, et un **son de
-  ramassage** est joué à chaque item reçu pour un retour immédiat.
-- ⚠️ Si un `config.yml` existe déjà sur ton serveur, supprime-le (ou édite la ligne
-  `gold-interval-ticks`) : Bukkit ne réécrit jamais un fichier de configuration existant.
-
-### ✅ Compilation
-- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
-- Le jar `BedwarsPlugin-1.0.14.jar` est compilé et prêt à l'emploi.
-
-### 🔄 Mise à jour
-- Numéro de version porté à **1.0.14** (`pom.xml` + `plugin.yml`).
-- README mis à jour (nouveautés 1.0.14, liste des commandes).
-
-## 📜 Historique — version 1.0.13
-
-Itération de **simplification de la configuration** : la forge d'équipe et ses générateurs de
-fer/or ne font désormais plus qu'un, et la validation d'arène s'adapte en conséquence.
-
-### ⛏️ `/bd <nom> forge <couleur>` : une seule commande pour toute la forge
-- La commande crée désormais **directement les générateurs de fer et d'or de l'équipe** à
-  l'emplacement choisi — plus besoin de les ajouter séparément. Ce sont ces générateurs qui
-  sont accélérés par l'amélioration d'équipe **Forge**, et c'est aussi ici qu'apparaissent les
-  bonus **diamant (palier 3) / émeraude (palier 4)**.
-- **Replaçable à volonté sans doublon** : relancer la commande pour une équipe supprime
-  automatiquement ses anciens générateurs fer/or avant d'en recréer de nouveaux.
-
-### 🧹 `/bd item` recentré sur les générateurs communs
-- `/bd <nom> item` n'accepte plus que **`diamand` et `emeraude`** (les générateurs communs de
-  la map) ; le fer et l'or d'une équipe passent exclusivement par `/bd <nom> forge <couleur>`.
-- L'auto-complétion et le message d'aide (`/bd`) ont été mis à jour en conséquence.
-
-### ✅ Validation d'arène adaptée
-- La vérification de complétude d'une arène exige désormais un **point de forge par équipe**
-  (avec un message d'aide indiquant la commande exacte à lancer) au lieu des anciens
-  générateurs fer/or libres, qui n'ont plus lieu d'être.
-- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
-- Le jar `BedwarsPlugin-1.0.13.jar` est compilé et prêt à l'emploi.
-
-### 🔄 Mise à jour
-- Numéro de version porté à **1.0.13** (`pom.xml` + `plugin.yml`).
-- README mis à jour (nouveautés 1.0.13, liste des commandes).
-
-## 📜 Historique — version 1.0.12
-
-Grosse itération **gameplay** : le kit de base s'enrichit, l'épée devient améliorable, la Forge
-produit désormais du diamant et de l'émeraude, et le Dragon Buff est repensé. À noter : les
-améliorations d'équipe **repartent toujours de zéro** à chaque nouvelle partie.
-
-### ⚔️ Épée à paliers (bois → pierre → fer → diamant)
-- L'onglet **Tools** du Marchand propose désormais un troisième palier d'amélioration : l'**épée**.
-  Comme la pioche et la hache, elle progresse par paliers payés en ressources (pierre : 10 fer,
-  fer : 7 or, diamant : 4 émeraudes) et **redescend d'un cran à chaque mort** — le palier bois
-  est acquis pour toujours.
-- Les épées ont été **retirées de l'onglet Mêlée** : tout passe désormais par ce système de
-  paliers, comme sur Hypixel.
-
-### 🎒 Kit de base complet et verrouillé (slots 1 / 2 / 3)
-- Chaque joueur en partie reçoit désormais **trois outils verrouillés** dans sa hotbar : l'épée
-  (slot 1), la hache (slot 2) et la pioche (slot 3), tous au palier actuel du joueur.
-- Comme l'ancienne épée en bois protégée, ces trois items sont **indroppables, indéplaçables,
-  indupliquables** et impossibles à échanger en main secondaire — et ce quel que soit leur palier.
-
-### 🔥 Forge repensée : diamants et émeraudes à la base
-- Nouveaux multiplicateurs de vitesse des générateurs fer/or : **palier 1 ×1.25, palier 2 ×1.75,
-  palier 3 ×2.0, palier 4 ×2.25**.
-- **Nouveau — palier 3** : du **diamant** apparaît directement à la base de l'équipe (1 par minute).
-- **Nouveau — palier 4** : le diamant accélère (1 toutes les 15 s) et de l'**émeraude** s'ajoute
-  (1 toutes les 2 minutes).
-- Ces bonus apparaissent au **point de forge de l'équipe**, à définir une fois via la nouvelle
-  commande `/bd <nom> forge <couleur>` (sauvegardé et cloné avec `/bd copy` comme les autres points).
-
-### 🗡️ Sharpened Blades plus juste
-- L'amélioration applique désormais l'enchantement **Tranchant directement sur l'épée du slot 1**,
-  au lieu d'un effet de potion Force qui boostait aussi les poings et les autres armes. Le bonus
-  se met à jour instantanément pour toute l'équipe à l'achat.
-
-### 🐉 Dragon Buff repensé
-- Fini le dragon gardien permanent spawné à l'achat : l'équipe qui possède Dragon Buff reçoit
-  désormais **un second dragon à la mort subite**, une fois le compteur et les phases terminés —
-  exactement au moment où les dragons entrent en jeu.
-
-### 👁️ `/bd spectate <nom>` et mode édition libre
-- **Nouvelle commande `/bd spectate <nom>`** : rejoint n'importe quelle partie en cours (ou en
-  mort subite) en tant que spectateur, sans passer par le GUI.
-- `/bd <nom> edit` (alias de `config`) : repasse l'arène en mode édition ; un admin peut alors
-  **modifier librement la map** (poser/casser des blocs) même s'il est marqué participant.
-
-### 📊 Scoreboard : compte à rebours de la prochaine phase
-- Le scoreboard affiche maintenant en direct **la prochaine phase et le temps restant** avant
-  qu'elle démarre (Phase 2, Phase 3 ou Mort subite).
-
-### ✅ Fiabilité & compilation
-- Les générateurs ne produisent **plus jamais de ressources hors partie** ni lorsqu'il n'y a plus
-  aucun joueur en jeu.
-- Les PNJ Marchand / Amélioration sont **respawnés automatiquement au lancement** de chaque partie
-  (sécurité contre les chunks déchargés ou un redémarrage entre la configuration et le match).
-- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
-- Le jar `BedwarsPlugin-1.0.12.jar` est compilé et prêt à l'emploi.
-
-### 🔄 Mise à jour
-- Numéro de version porté à **1.0.12** (`pom.xml` + `plugin.yml`).
-- README mis à jour (nouveautés 1.0.12).
-
-## 📜 Historique — version 1.0.11
-
-Version de **fiabilisation technique** : la récupération des skins des PNJ est consolidée et la
-compilation est de nouveau vérifiée de bout en bout. Aucun changement de gameplay — vos arènes,
-shops et améliorations se comportent exactement comme en 1.0.10.
-
-### 🎭 Skins de PNJ fiabilisés
-- La récupération du skin d'un PNJ (quand un pseudo est fourni via
-  `/bd <nom> shop <shop|upgrade> color <couleur> [pseudo]`) utilise désormais
-  `PlayerProfile#complete(true)` de l'API Paper au lieu de `update().join()` : le profil est
-  complété **synchronement avec ses textures**, de façon plus directe et sans dépendre d'une
-  méthode appelée à disparaître de l'API.
-- Le code s'appuie explicitement sur l'interface Paper `com.destroystokyo.paper.profile.PlayerProfile`
-  (le plugin cible Paper de toute façon) — plus d'ambiguïté avec l'interface Bukkit générique.
-
-### 🧩 Import `LeatherArmorMeta` vérifié
-- L'armure en cuir teintée à la couleur de l'équipe repose sur
-  `org.bukkit.inventory.meta.LeatherArmorMeta`, emplacement **confirmé comme le seul valide**
-  dans l'API Paper 1.21 (vérifié directement dans le jar officiel, jusqu'aux builds les plus
-  récents).
-
-### ✅ Compilation
-- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
-- Le jar `BedwarsPlugin-1.0.11.jar` est compilé et prêt à l'emploi.
-
-### 🔄 Mise à jour
-- Numéro de version porté à **1.0.11** (`pom.xml` + `plugin.yml`).
-- README mis à jour (nouveautés 1.0.11).
-
-## 📜 Historique — version 1.0.10
-
-Cette version refond les PNJ **Marchand** et **Amélioration** pour rendre l'ouverture des menus
-fiable à 100 %, quel que soit l'endroit exact où le joueur clique sur le PNJ.
-
-### 🧟 Des PNJ repensés : adieu les Armor Stands, bonjour les « vendeurs »
-- Les PNJ ne sont **plus des Armor Stands** mais des mobs immobiles (Zombies déguisés : IA,
-  dégâts, combustion au soleil, bruit et ramassage d'objets désactivés, aucun drop d'équipement),
-  habillés d'une tête de joueur et d'une armure en cuir teintée à la couleur de l'équipe.
-- Pourquoi ce changement ? Les Armor Stands utilisent un événement de clic séparé et
-  *positionnel* (`PlayerInteractAtEntityEvent`) dont la fiabilité dépend de l'endroit précis du
-  clic sur le corps du PNJ. Un mob classique déclenche toujours l'événement standard
-  `PlayerInteractEntityEvent` : **le menu s'ouvre à tous les coups**, où que l'on clique.
-
-### 🖱️ Clic PNJ corrigé (plus de double ouverture)
-- Le gestionnaire d'événement écoute désormais `PlayerInteractEntityEvent` et ignore la main
-  secondaire (`EquipmentSlot.HAND`), ce qui élimine le double déclenchement main/off-hand
-  qui pouvait ouvrir le menu deux fois.
-
-### 🧹 Purge anti-doublons élargie
-- Le nettoyage automatique des PNJ résiduels avant chaque spawn ne se limite plus aux Armor
-  Stands : tous les PNJ marqués par le tag interne du plugin sont purgés, quel que soit leur
-  type d'entité — les éventuels restes des anciennes versions sont nettoyés au passage.
-
-### ✅ Fiabilité & compilation
-- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
-- Le jar `BedwarsPlugin-1.0.10.jar` est compilé et prêt à l'emploi.
-
-### 🔄 Mise à jour
-- Numéro de version porté à **1.0.10** (`pom.xml` + `plugin.yml`).
-- README mis à jour (nouveautés 1.0.10).
-
-## 📜 Historique — version 1.0.9
-
-Cette version est avant tout une **version de fiabilisation** : elle élimine définitivement les PNJ
-« fantômes » qui se dupliquaient à chaque redémarrage du serveur, et corrige le comportement des
-arènes après un reboot.
-
-### 🧹 Fin des PNJ fantômes (marchand & amélioration)
-- Les PNJ Marchand / Amélioration ne sont **plus persistés par le monde** (`setPersistent(false)`) :
-  c'est le plugin qui les fait réapparaître proprement à chaque démarrage. Avant, Minecraft les
-  sauvegardait aussi de son côté, ce qui créait un doublon supplémentaire à chaque redémarrage.
-- Chaque PNJ est désormais marqué d'un tag interne (`NamespacedKey`) : avant tout nouveau spawn,
-  le plugin charge le chunk concerné et **supprime automatiquement tout PNJ résiduel** trouvé à
-  proximité. Les doublons accumulés par les anciennes versions sont donc nettoyés une fois pour
-  toutes, sans intervention.
-
-### 🧼 Nouvelle commande `/bd arene clean`
-- Purge immédiatement tous les PNJ marchand/amélioration résiduels, puis les fait réapparaître
-  proprement pour toutes les arènes sauvegardées — pratique pour nettoyer un serveur **sans
-  redémarrer**. Réservée à la permission `bedwars.admin`.
-
-### 🗑️ Suppression définitive de l'ancien PNJ « hub »
-- Le vieux villageois cliquable (remplacé depuis un moment par `/bd arene gui`) est maintenant
-  **purgé automatiquement au démarrage**, et son fichier de sauvegarde est effacé pour que le
-  nettoyage n'ait lieu qu'une seule fois.
-
-### 🔄 État des arènes après redémarrage
-- Une arène complète et sauvegardée (`/bd <nom> save`) revient désormais à l'état **EN ATTENTE**
-  après un redémarrage, au lieu de repasser « non configurée » (SETUP) : vos arènes restent
-  jouables même après un reboot du serveur.
-
-### ✅ Fiabilité & compilation
-- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
-- Le jar `BedwarsPlugin-1.0.9.jar` est compilé et prêt à l'emploi.
-
-### 🔄 Mise à jour
-- Numéro de version porté à **1.0.9** (`pom.xml` + `plugin.yml`).
-- README mis à jour (commande `/bd arene clean`, nouveautés 1.0.9).
-
-## 📜 Historique — version 1.0.8
-
-### 👥 Nombre de joueurs minimum (`/bd <nom> minplayers`)
-- **Nouvelle commande `/bd <nom> minplayers <nombre|off>`** : définit le seuil de joueurs à partir
-  duquel le compte à rebours du lobby démarre automatiquement, indépendamment du nombre maximum.
-- En `off` (par défaut), le comportement d'origine est conservé : il faut que le lobby soit complet
-  pour lancer la partie. Avec par exemple `minplayers 4` sur une arène 8v8, la partie démarre dès
-  4 joueurs présents, sans attendre que la salle soit pleine.
-- Les retardataires peuvent encore rejoindre pendant le compte à rebours ; celui-ci s'annule
-  automatiquement si le nombre de joueurs repasse sous le seuil configuré.
-
-### 🎒 Items du lobby d'attente
-Trois items spéciaux sont désormais donnés automatiquement à chaque joueur qui rejoint le lobby,
-verrouillés comme l'épée en bois (indéplaçables, indroppables, indupliquables) :
-- **Slot 1 — diamant « Forcer le lancement »** (réservé aux admins `bedwars.admin`) : lance la partie
-  immédiatement, peu importe le nombre de joueurs présents.
-- **Slot 3 — bloc « Choisir son équipe »** (laine recolorée à l'équipe choisie) : ouvre un menu
-  listant les équipes disponibles avec leur remplissage, pour préréserver une place dans l'équipe
-  de son choix. Les préférences sont honorées en priorité au moment de la répartition ; les joueurs
-  n'ayant rien choisi sont répartis aléatoirement sur les places restantes.
-- **Slot 5 — bloc barrière « Quitter la partie »** : équivalent de `/bd leave`, renvoie au spawn du monde.
-
-### ✅ Fiabilité & compilation
-- Compilation **vérifiée et réussie** avec Maven + Paper 1.21.1 API (Java 21).
-- Méthode de récupération du skin Mojang corrigée (`PlayerProfile#update().join()`) pour la pleine
-  compatibilité avec l'API Paper 1.21.1 (`LeatherArmorMeta` déplacée vers `org.bukkit.inventory.meta`).
-- Le jar `BedwarsPlugin-1.0.8.jar` est compilé, testé et prêt à l'emploi.
-
-### 🔄 Mise à jour
-- Numéro de version porté à **1.0.8** (`pom.xml` + `plugin.yml`).
-- README mis à jour (commande `minplayers`, items de lobby, nouveautés 1.0.8, historique).
-
-## 🔑 Permissions
-- `bedwars.admin` — Administration & configuration des arènes (OP par défaut)
-- `bedwars.join` — Rejoindre une partie (tous par défaut)

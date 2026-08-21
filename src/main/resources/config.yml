@@ -20,8 +20,8 @@ npc:
   default-skin: ""
 
 generators:
-  iron-interval-ticks: 20
-  gold-interval-ticks: 40
+  iron-interval-ticks: 40
+  gold-interval-ticks: 80
   diamond-interval-seconds: 30
   emerald-interval-seconds: 45
   diamond-interval-seconds-phase2: 20   # à 25 minutes

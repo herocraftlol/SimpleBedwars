@@ -44,7 +44,8 @@ public class GameInstance {
 
     private BukkitTask mainTimerTask;
     private BukkitTask ironGoldTask;
-    private final Map<Generator, BukkitTask> preciousTasks = new HashMap<>();
+    private BukkitTask preciousTask;
+    private final Map<Generator, org.bukkit.entity.ArmorStand> generatorHolograms = new HashMap<>();
     private BukkitTask forgeBonusTask;
     private final Map<TeamColor, Long> forgeDiamondCounter = new EnumMap<>(TeamColor.class);
     private final Map<TeamColor, Long> forgeEmeraldCounter = new EnumMap<>(TeamColor.class);
@@ -534,11 +535,71 @@ public class GameInstance {
             }
         }, 20L, 1L);
 
-        for (Generator gen : arena.getGenerators()) {
-            if (gen.getType() == GeneratorType.DIAMOND || gen.getType() == GeneratorType.EMERAUDE) {
-                schedulePreciousGenerator(gen);
+        spawnGeneratorHolograms();
+
+        // Diamant/Émeraude : un seul tick par seconde (au lieu d'une tâche par générateur à
+        // période fixe), pour pouvoir afficher un compte à rebours en temps réel au-dessus.
+        preciousTask = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (!isGameActive()) return;
+            for (Generator gen : arena.getGenerators()) {
+                if (gen.getType() != GeneratorType.DIAMOND && gen.getType() != GeneratorType.EMERAUDE) continue;
+                gen.incrementTick();
+                long intervalSeconds = getIntervalFor(gen.getType());
+                if (gen.getTickCounter() >= intervalSeconds) {
+                    gen.resetTick();
+                    spawnCappedResource(gen);
+                }
+                updateGeneratorHologram(gen, Math.max(0, intervalSeconds - gen.getTickCounter()));
             }
+        }, 20L, 20L);
+    }
+
+    /** Fait apparaître un hologramme (Armor Stand invisible) au-dessus de chaque générateur diamant/émeraude. */
+    private void spawnGeneratorHolograms() {
+        removeGeneratorHolograms();
+        for (Generator gen : arena.getGenerators()) {
+            if (gen.getType() != GeneratorType.DIAMOND && gen.getType() != GeneratorType.EMERAUDE) continue;
+            Location loc = gen.getLocation().clone().add(0.5, 1.6, 0.5);
+            org.bukkit.entity.ArmorStand stand = (org.bukkit.entity.ArmorStand) loc.getWorld()
+                    .spawnEntity(loc, org.bukkit.entity.EntityType.ARMOR_STAND);
+            stand.setVisible(false);
+            stand.setMarker(true);
+            stand.setGravity(false);
+            stand.setInvulnerable(true);
+            stand.setPersistent(false);
+            stand.setCustomNameVisible(true);
+            generatorHolograms.put(gen, stand);
+            updateGeneratorHologram(gen, getIntervalFor(gen.getType()));
         }
+    }
+
+    private void updateGeneratorHologram(Generator gen, long secondsLeft) {
+        org.bukkit.entity.ArmorStand stand = generatorHolograms.get(gen);
+        if (stand == null || !stand.isValid()) return;
+        String name = gen.getType() == GeneratorType.DIAMOND ? "Diamant" : "Émeraude";
+        ChatColor color = gen.getType() == GeneratorType.DIAMOND ? ChatColor.AQUA : ChatColor.GREEN;
+        stand.setCustomName(color + "" + ChatColor.BOLD + name + " " + romanPhase() + ChatColor.RESET
+                + ChatColor.GRAY + " - " + secondsLeft + "s");
+    }
+
+    /** Palier actuel (I/II/III) des générateurs diamant/émeraude, pour l'afficher dans le scoreboard. */
+    public String getPreciousPhaseLabel() {
+        return "Minerais: Palier " + romanPhase();
+    }
+
+    private String romanPhase() {
+        return switch (phase) {
+            case 2 -> "II";
+            case 3 -> "III";
+            default -> "I";
+        };
+    }
+
+    private void removeGeneratorHolograms() {
+        for (org.bukkit.entity.ArmorStand stand : generatorHolograms.values()) {
+            if (stand != null && stand.isValid()) stand.remove();
+        }
+        generatorHolograms.clear();
     }
 
     /** true si une partie est réellement en cours et qu'il y a au moins un joueur en jeu. */
@@ -634,20 +695,6 @@ public class GameInstance {
         return loc.clone().add(0.5 + dx, 0.2, 0.5 + dz);
     }
 
-    private void schedulePreciousGenerator(Generator gen) {
-        BukkitTask existing = preciousTasks.get(gen);
-        if (existing != null) existing.cancel();
-
-        long intervalSeconds = getIntervalFor(gen.getType());
-        long periodTicks = intervalSeconds * 20L;
-
-        BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
-            if (!isGameActive()) return;
-            spawnCappedResource(gen);
-        }, periodTicks, periodTicks);
-        preciousTasks.put(gen, task);
-    }
-
     private long getIntervalFor(GeneratorType type) {
         String prefix = type == GeneratorType.DIAMOND ? "diamond" : "emerald";
         String key = switch (phase) {
@@ -658,8 +705,15 @@ public class GameInstance {
         return plugin.getConfig().getLong(key, type == GeneratorType.DIAMOND ? 30 : 45);
     }
 
-    /** Fer/Or : se répartit automatiquement entre les joueurs présents sur le générateur. */
+    /** Fer/Or d'un générateur commun (non lié à une équipe) : distribué directement aux joueurs présents. */
     private void spawnSplitResource(Generator gen) {
+        if (gen.getTeam() != null) {
+            // Générateur de forge : les ressources restent toujours au sol, sur place (jamais
+            // "envoyées" dans l'inventaire), avec un plafond qui augmente à chaque palier de Forge.
+            spawnForgeGroundResource(gen);
+            return;
+        }
+
         List<Player> nearby = new ArrayList<>();
         for (UUID uuid : getAllParticipantIds()) {
             Player p = Bukkit.getPlayer(uuid);
@@ -670,16 +724,43 @@ public class GameInstance {
             }
         }
         if (nearby.isEmpty()) {
-            Location dropLoc = gen.getTeam() != null
-                    ? randomizeWithinZone(gen.getLocation(), 3) // générateur de forge : zone 3x3
-                    : gen.getLocation().clone().add(0.5, 0.2, 0.5);
-            gen.getLocation().getWorld().dropItem(dropLoc, new ItemStack(gen.getType().getMaterial(), 1));
+            gen.getLocation().getWorld().dropItem(gen.getLocation().clone().add(0.5, 0.2, 0.5),
+                    new ItemStack(gen.getType().getMaterial(), 1));
         } else {
             for (Player p : nearby) {
                 giveOrDrop(p, new ItemStack(gen.getType().getMaterial(), 1));
                 p.playSound(p.getLocation(), org.bukkit.Sound.ENTITY_ITEM_PICKUP, 0.4f, 1.4f);
             }
         }
+    }
+
+    /**
+     * Fer/Or d'un générateur de forge : toujours au sol, dispersé dans une zone 3x3, avec un
+     * plafond qui augmente à chaque palier de Forge de l'équipe (24 fer / 12 or de base, +8/+4
+     * par palier), jusqu'à devenir illimité au dernier palier (4).
+     */
+    private void spawnForgeGroundResource(Generator gen) {
+        List<UUID> alive = groundItems.computeIfAbsent(gen, g -> new ArrayList<>());
+        alive.removeIf(id -> {
+            org.bukkit.entity.Entity e = Bukkit.getEntity(id);
+            return e == null || e.isDead() || !e.isValid();
+        });
+
+        int forgeLevel = teamUpgrades.containsKey(gen.getTeam()) ? teamUpgrades.get(gen.getTeam()).getForge() : 0;
+        int cap = forgeGroundCap(gen.getType(), forgeLevel);
+        if (cap >= 0 && alive.size() >= cap) return;
+
+        Item item = gen.getLocation().getWorld().dropItem(randomizeWithinZone(gen.getLocation(), 3),
+                new ItemStack(gen.getType().getMaterial(), 1));
+        alive.add(item.getUniqueId());
+    }
+
+    /** Plafond au sol du fer/or d'une forge selon son palier ; -1 = illimité (dernier palier). */
+    private int forgeGroundCap(GeneratorType type, int forgeLevel) {
+        if (forgeLevel >= TeamUpgrades.MAX_LEVEL_FORGE) return -1;
+        int base = type == GeneratorType.FER ? 24 : 12;
+        int perLevel = type == GeneratorType.FER ? 8 : 4;
+        return base + perLevel * forgeLevel;
     }
 
     /** Diamant/Émeraude : toujours au sol, jamais partagé automatiquement, avec un plafond au sol. */
@@ -757,25 +838,15 @@ public class GameInstance {
             if (phase == 1 && remainingMinutes <= phase2Minute) {
                 phase = 2;
                 broadcastToArena(ChatColor.GOLD + "Les diamants et émeraudes apparaissent plus vite !");
-                rescheduleAllPrecious();
             } else if (phase == 2 && remainingMinutes <= phase3Minute) {
                 phase = 3;
                 broadcastToArena(ChatColor.GOLD + "" + ChatColor.BOLD + "Les diamants et émeraudes apparaissent encore plus vite !");
-                rescheduleAllPrecious();
             }
 
             if (remainingSeconds <= 0 && !suddenDeathTriggered) {
                 triggerSuddenDeath();
             }
         }, 20L, 20L);
-    }
-
-    private void rescheduleAllPrecious() {
-        for (Generator gen : arena.getGenerators()) {
-            if (gen.getType() == GeneratorType.DIAMOND || gen.getType() == GeneratorType.EMERAUDE) {
-                schedulePreciousGenerator(gen);
-            }
-        }
     }
 
     private void triggerSuddenDeath() {
@@ -901,6 +972,30 @@ public class GameInstance {
         checkGameEnd();
     }
 
+    /**
+     * Après une mort normale (lit encore intact) : le joueur passe en spectateur pendant
+     * quelques secondes, avec un compte à rebours affiché en gros à l'écran (title), avant de
+     * réapparaître automatiquement à son spawn d'équipe.
+     */
+    public void startRespawnCountdown(Player player) {
+        player.setGameMode(GameMode.SPECTATOR);
+        int seconds = plugin.getConfig().getInt("game.respawn-countdown-seconds", 5);
+
+        final int[] remaining = {seconds};
+        BukkitTask task = Bukkit.getScheduler().runTaskTimer(plugin, () -> {
+            if (!player.isOnline() || remaining[0] <= 0) return;
+            player.sendTitle(ChatColor.RED + "" + ChatColor.BOLD + remaining[0], ChatColor.GRAY + "Réapparition...", 0, 25, 5);
+            remaining[0]--;
+        }, 0L, 20L);
+
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            task.cancel();
+            if (player.isOnline() && playerTeams.containsKey(player.getUniqueId())) {
+                respawnAtTeamSpawn(player);
+            }
+        }, seconds * 20L);
+    }
+
     public void respawnAtTeamSpawn(Player player) {
         TeamColor color = playerTeams.get(player.getUniqueId());
         ArenaTeam team = color != null ? arena.getTeams().get(color) : null;
@@ -1016,7 +1111,8 @@ public class GameInstance {
         if (scoreboardTask != null) scoreboardTask.cancel();
         if (upgradeEffectsTask != null) upgradeEffectsTask.cancel();
         if (forgeBonusTask != null) forgeBonusTask.cancel();
-        for (BukkitTask task : preciousTasks.values()) task.cancel();
+        if (preciousTask != null) preciousTask.cancel();
+        removeGeneratorHolograms();
         killAllDragons();
     }
 

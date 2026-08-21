@@ -173,8 +173,10 @@ public class CombatListener implements Listener {
         ArenaTeam team = color != null ? game.getArena().getTeams().get(color) : null;
 
         if (team != null && !team.isBedDestroyed() && team.getSpawnLocation() != null) {
-            event.setRespawnLocation(team.getSpawnLocation());
-            plugin.getServer().getScheduler().runTask(plugin, () -> game.respawnAtTeamSpawn(player));
+            Location specTarget = game.getArena().getSpectatorSpawnLocation() != null
+                    ? game.getArena().getSpectatorSpawnLocation() : game.getArena().getSpecLocation();
+            event.setRespawnLocation(specTarget != null ? specTarget : team.getSpawnLocation());
+            plugin.getServer().getScheduler().runTask(plugin, () -> game.startRespawnCountdown(player));
         } else {
             Location specTarget = game.getArena().getSpectatorSpawnLocation() != null
                     ? game.getArena().getSpectatorSpawnLocation() : game.getArena().getSpecLocation();

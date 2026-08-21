@@ -73,6 +73,7 @@ public class BedwarsPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new ShopListener(this), this);
         getServer().getPluginManager().registerEvents(new KitProtectionListener(this), this);
         getServer().getPluginManager().registerEvents(new LobbyItemListener(this), this);
+        getServer().getPluginManager().registerEvents(new com.bedwars.listeners.TntListener(this), this);
 
         getLogger().info("BedwarsPlugin activé — " + arenaManager.getArenas().size() + " arène(s) chargée(s).");
     }
