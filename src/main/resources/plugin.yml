@@ -1,9 +1,9 @@
 name: BedwarsPlugin
 main: com.bedwars.BedwarsPlugin
-version: 1.0.17
+version: 1.0.18
 api-version: '1.21'
-author: herocraftlol
-description: Plugin BedWars complet et configurable en jeu pour Paper 1.21+. TNT auto-amorcee qui ne casse que les blocs poses par les joueurs, Forge avec plafonds au sol, hologrammes de generateurs, respawn avec compte a rebours, shop et ameliorations configurables. Aucune dependance externe requise.
+author: Claude
+description: Plugin BedWars entièrement configurable en jeu via /bd
 
 commands:
   bd:

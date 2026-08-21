@@ -62,6 +62,9 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         if (sub.equals("leave")) {
             return handleLeave(sender);
         }
+        if (sub.equals("quickmenu")) {
+            return handleQuickMenu(sender, args);
+        }
         if (sub.equals("list")) {
             return handleList(sender);
         }
@@ -111,6 +114,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
             case "spawn" -> handleSpawn(player, arena, args);
             case "item" -> handleItem(player, arena, args);
             case "forge" -> handleForge(player, arena, args);
+            case "chest" -> handleChest(player, arena, args);
             case "geninfo" -> handleGenInfo(player, arena);
             case "reset" -> handleReset(player, arena);
             case "shop" -> handleShop(player, arena, args);
@@ -456,6 +460,71 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private static final java.util.Map<String, String> QUICKMENU_ALIASES = java.util.Map.of(
+            "epee", com.bedwars.util.PlayerPrefsManager.SWORD,
+            "épée", com.bedwars.util.PlayerPrefsManager.SWORD,
+            "pioche", com.bedwars.util.PlayerPrefsManager.PICKAXE,
+            "hache", com.bedwars.util.PlayerPrefsManager.AXE,
+            "bloc", com.bedwars.util.PlayerPrefsManager.BLOCK
+    );
+
+    /**
+     * /bd quickmenu <épée|pioche|hache|bloc> <0-8> : chaque joueur peut choisir lui-même dans
+     * quel slot de sa hotbar il retrouvera son épée, sa pioche, sa hache (en partie) et le bloc
+     * "choisir son équipe" (dans le lobby d'attente). Préférence personnelle, sauvegardée.
+     */
+    private boolean handleQuickMenu(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Cette action doit être exécutée en jeu.");
+            return true;
+        }
+        if (args.length < 3) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd quickmenu <épée|pioche|hache|bloc> <0-8>");
+            return true;
+        }
+        String key = QUICKMENU_ALIASES.get(args[1].toLowerCase());
+        if (key == null) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Item inconnu. Utilisez: épée, pioche, hache, bloc.");
+            return true;
+        }
+        int slot;
+        try {
+            slot = Integer.parseInt(args[2]);
+        } catch (NumberFormatException e) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Le slot doit être un nombre entre 0 et 8.");
+            return true;
+        }
+        if (slot < 0 || slot > 8) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Le slot doit être compris entre 0 et 8.");
+            return true;
+        }
+
+        // On évite qu'un même joueur assigne deux items différents au même slot.
+        var prefs = plugin.getPlayerPrefsManager();
+        for (String otherKey : new String[]{com.bedwars.util.PlayerPrefsManager.SWORD, com.bedwars.util.PlayerPrefsManager.AXE,
+                com.bedwars.util.PlayerPrefsManager.PICKAXE, com.bedwars.util.PlayerPrefsManager.BLOCK}) {
+            if (otherKey.equals(key)) continue;
+            if (prefs.getSlot(player.getUniqueId(), otherKey, defaultSlotFor(otherKey)) == slot) {
+                player.sendMessage(PREFIX + ChatColor.RED + "Ce slot est déjà utilisé par un autre item de votre quickmenu.");
+                return true;
+            }
+        }
+
+        prefs.setSlot(player.getUniqueId(), key, slot);
+        player.sendMessage(PREFIX + ChatColor.GREEN + "Position personnalisée enregistrée : " + args[1].toLowerCase()
+                + " -> slot " + (slot + 1) + " de la hotbar." + ChatColor.GRAY + " Prend effet à la prochaine partie/au prochain lobby.");
+        return true;
+    }
+
+    private int defaultSlotFor(String key) {
+        return switch (key) {
+            case com.bedwars.util.PlayerPrefsManager.SWORD -> com.bedwars.util.KitProtectionUtil.SLOT_SWORD;
+            case com.bedwars.util.PlayerPrefsManager.AXE -> com.bedwars.util.KitProtectionUtil.SLOT_AXE;
+            case com.bedwars.util.PlayerPrefsManager.PICKAXE -> com.bedwars.util.KitProtectionUtil.SLOT_PICKAXE;
+            default -> com.bedwars.util.LobbyItemUtil.SLOT_TEAM_SELECT;
+        };
+    }
+
     private boolean handleList(CommandSender sender) {
         List<Arena> arenas = new ArrayList<>(plugin.getArenaManager().getArenas().values());
         if (arenas.isEmpty()) {
@@ -596,6 +665,38 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
                 + ChatColor.GREEN + " (générateurs de fer et d'or créés ici, accélérés par l'amélioration Forge).");
     }
 
+    /**
+     * /bd <nom> chest <couleur> : ajoute le coffre visé (regardé, à moins de 10 blocs) à la liste
+     * des coffres de cette équipe. Une équipe peut avoir plusieurs coffres ; ils sont tous vidés
+     * automatiquement au début et à la fin de chaque partie.
+     */
+    private void handleChest(Player player, Arena arena, String[] args) {
+        if (args.length < 3) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd " + arena.getName() + " chest <couleur d'équipe>");
+            player.sendMessage(ChatColor.GRAY + "Regardez directement le coffre à moins de 10 blocs avant de taper cette commande.");
+            return;
+        }
+        TeamColor color = resolveColor(player, arena, args[2]);
+        if (color == null) return;
+
+        org.bukkit.block.Block target = player.getTargetBlockExact(10);
+        if (target == null || !(target.getState() instanceof org.bukkit.block.Chest)) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Regardez directement un coffre (à moins de 10 blocs) avant de taper cette commande.");
+            return;
+        }
+
+        ArenaTeam team = arena.getOrCreateTeam(color);
+        Location loc = target.getLocation();
+        if (team.getChestLocations().stream().anyMatch(l -> l.getBlockX() == loc.getBlockX()
+                && l.getBlockY() == loc.getBlockY() && l.getBlockZ() == loc.getBlockZ())) {
+            player.sendMessage(PREFIX + ChatColor.YELLOW + "Ce coffre est déjà enregistré pour cette équipe.");
+            return;
+        }
+        team.getChestLocations().add(loc);
+        player.sendMessage(PREFIX + ChatColor.GREEN + "Coffre ajouté à l'équipe " + color.getColoredName()
+                + ChatColor.GREEN + " (" + team.getChestLocations().size() + " au total). Il sera vidé au début et à la fin de chaque partie.");
+    }
+
     /** /bd <nom> geninfo : liste tous les générateurs de l'arène (type, équipe, position) pour diagnostiquer. */
     private void handleGenInfo(Player player, Arena arena) {
         if (arena.getGenerators().isEmpty()) {
@@ -730,12 +831,14 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "/bd arene gui" + ChatColor.DARK_GRAY + " (affiche directement le GUI des arènes)");
         sender.sendMessage(ChatColor.GRAY + "/bd arene clean" + ChatColor.DARK_GRAY + " (purge les PNJ marchand/amélioration fantômes)");
         sender.sendMessage(ChatColor.GRAY + "/bd join <nom>  |  /bd spectate <nom>  |  /bd leave  |  /bd list");
+        sender.sendMessage(ChatColor.GRAY + "/bd quickmenu <épée|pioche|hache|bloc> <0-8>" + ChatColor.DARK_GRAY + " (personnalisez vos slots)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> equipe <2/4/6/8> <joueurs>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> pos1 | pos2 | posconfirm");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> bed <couleur>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> spawn <couleur>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> item <diamand|emeraude>" + ChatColor.DARK_GRAY + " (générateurs communs de la map)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> forge <couleur>" + ChatColor.DARK_GRAY + " (crée fer+or de l'équipe, accélérés par l'amélioration Forge)");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> chest <couleur>" + ChatColor.DARK_GRAY + " (ajoute le coffre visé à l'équipe, vidé à chaque partie)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> geninfo" + ChatColor.DARK_GRAY + " (liste tous les générateurs pour diagnostiquer)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> reset" + ChatColor.DARK_GRAY + " (réinitialise immédiatement une arène, même en pleine partie)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> shop <shop|upgrade> color <couleur> [pseudo]");
@@ -749,11 +852,13 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> options = new ArrayList<>();
         if (args.length == 1) {
-            options.addAll(List.of("create", "delete", "copy", "shop", "arene", "join", "spectate", "leave", "list"));
+            options.addAll(List.of("create", "delete", "copy", "shop", "arene", "join", "spectate", "leave", "quickmenu", "list"));
             options.addAll(plugin.getArenaManager().getArenas().keySet());
         } else if (args.length == 2) {
             if (args[0].equalsIgnoreCase("arene")) {
                 options.addAll(List.of("gui", "clean"));
+            } else if (args[0].equalsIgnoreCase("quickmenu")) {
+                options.addAll(List.of("epee", "pioche", "hache", "bloc"));
             } else if (args[0].equalsIgnoreCase("join") || args[0].equalsIgnoreCase("delete")
                     || args[0].equalsIgnoreCase("copy") || args[0].equalsIgnoreCase("spectate")) {
                 options.addAll(plugin.getArenaManager().getArenas().keySet());
@@ -762,10 +867,12 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
                 options.addAll(List.of("blocks", "melee", "armor", "ranged", "potions", "utility"));
             } else if (plugin.getArenaManager().getArena(args[0]) != null) {
                 options.addAll(List.of("equipe", "pos1", "pos2", "posconfirm", "bed", "spawn",
-                        "item", "forge", "geninfo", "reset", "shop", "spec", "specspawn", "minplayers", "save", "edit", "config"));
+                        "item", "forge", "chest", "geninfo", "reset", "shop", "spec", "specspawn", "minplayers", "save", "edit", "config"));
             }
         } else if (args.length == 7 && args[0].equalsIgnoreCase("shop")) {
             options.addAll(List.of("fer", "or", "diamand", "emeraude"));
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("quickmenu")) {
+            options.addAll(List.of("0", "1", "2", "3", "4", "5", "6", "7", "8"));
         } else if (args.length == 3) {
             if (args[0].equalsIgnoreCase("delete")) {
                 options.add("confirm");
@@ -773,7 +880,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
             Arena arena = plugin.getArenaManager().getArena(args[0]);
             if (arena != null) {
                 switch (args[1].toLowerCase()) {
-                    case "bed", "spawn", "forge" -> options.addAll(colorNames());
+                    case "bed", "spawn", "forge", "chest" -> options.addAll(colorNames());
                     case "item" -> options.addAll(List.of("diamand", "emeraude"));
                     case "shop" -> options.addAll(List.of("shop", "upgrade"));
                 }

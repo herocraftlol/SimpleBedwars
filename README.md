@@ -6,23 +6,34 @@ personnalisables, générateurs de ressources, shop et améliorations d'équipe 
 PNJ vendeurs à skin de joueur, lobby d'attente flottant, pièges, mort subite avec dragons —
 le tout **sans aucune dépendance externe**.
 
-## ✨ Nouveautés de la v1.0.17
+## ✨ Nouveautés de la v1.0.18
 
-- **Construction strictement limitée à la zone de jeu** : pendant une partie, tout bloc
-  placé en dehors des limites définies par `pos1`/`pos2` — en hauteur, sur les côtés ou
-  en dessous — est désormais annulé, avec un message d'avertissement pour le joueur. Le
-  mode édition (`/bd <nom> edit`) n'est pas concerné : un admin peut toujours construire
-  librement pour configurer la map.
-- **Bug corrigé : les PNJ marchand/amélioration ne se font plus disparaître entre eux** :
-  le nettoyage anti-doublons balayait un rayon de 3 blocs autour d'un nouveau PNJ, ce qui
-  supprimait aussi le PNJ voisin (le marchand et l'amélioration d'une même équipe sont
-  souvent placés côte à côte). Le rayon de nettoyage est maintenant réduit à l'emplacement
-  exact (0,5 bloc) : il détecte toujours les vrais doublons, sans jamais toucher un autre
-  PNJ placé juste à côté.
-- **Map toujours propre à chaque partie** : tous les items et minerais laissés au sol dans
-  la zone de jeu sont automatiquement nettoyés au début ET à la fin de chaque partie (y
-  compris après un `/bd <nom> reset`), pour repartir sur une map impeccable à chaque
-  lancement.
+- **`/bd quickmenu <épée|pioche|hache|bloc> <0-8>`** : chaque joueur personnalise lui-même
+  la position de son épée, sa pioche, sa hache (en partie) et du bloc « choisir son équipe »
+  (dans le lobby d'attente) dans sa hotbar. La préférence est individuelle et sauvegardée
+  (`playerprefs.yml`), puis appliquée automatiquement à chaque partie ou lobby suivant. La
+  protection anti-drop/déplacement suit désormais l'item lui-même plutôt qu'un numéro de
+  slot fixe : elle fonctionne donc quel que soit le slot choisi.
+- **`/bd <nom> chest <couleur>`** : enregistre le coffre visé (jusqu'à 10 blocs) dans la
+  liste des coffres d'une équipe (plusieurs coffres possibles). Ces coffres — ainsi que le
+  coffre ender de chaque participant — sont désormais **vidés automatiquement au début ET
+  à la fin de chaque partie**, pour éviter tout stockage d'objets d'une partie à l'autre.
+- **Pioche et hache ne sont plus données au spawn** : chaque joueur doit d'abord les acheter
+  dans l'onglet « Tools » du shop pour les avoir et les garder le reste de la partie. Les
+  paliers utilisent maintenant les mêmes noms que l'épée (Bois → Pierre → Fer → Diamant) :
+  Bois **10 fer**, Pierre **10 fer**, Fer **4 or**, Diamant **12 or**. Plus rien n'est
+  gratuit pour pioche/hache, mais une fois le palier bois acheté, il reste acquis pour
+  toujours ; la dégradation d'un cran à chaque mort ne concerne que les paliers supérieurs.
+  L'épée n'est pas concernée : son palier bois reste donné gratuitement au spawn.
+- **Spectateurs libres de se déplacer dans toute l'arène** : le confinement utilisait un
+  rayon fixe de 60 blocs depuis le point spectateur, ce qui pouvait téléporter un spectateur
+  même au milieu d'une grande map. La vraie zone de jeu (`pos1`/`pos2`, avec une bonne marge
+  tout autour) est maintenant utilisée à la place de ce simple cercle.
+- **Les minerais n'« éjectent » plus** : vitesse nulle systématique sur tous les items
+  générés (fer, or, diamant, émeraude), qui apparaissent pile à l'endroit prévu au lieu de
+  sursauter ou glisser. Le rayon de dispersion de la Forge est également resserré.
+- **Fireball ajoutée au shop par défaut** (onglet utilitaires, **40 fer**). Si votre shop
+  est déjà configuré, ajoutez-la avec `/bd shop utility <slot> FIRE_CHARGE 1 40 fer`.
 
 ## 📦 Installation
 
@@ -51,6 +62,7 @@ et le shade-plugin). Nécessite un JDK 21+ et Maven.
 /bd join <nom>
 /bd spectate <nom>
 /bd leave
+/bd quickmenu <épée|pioche|hache|bloc> <0-8>        (personnalisez vos slots de hotbar)
 /bd list
 /bd <nom> equipe <2/4/6/8> <joueurs par équipe>
 /bd <nom> pos1 | pos2 | posconfirm
@@ -58,6 +70,7 @@ et le shade-plugin). Nécessite un JDK 21+ et Maven.
 /bd <nom> spawn <couleur>
 /bd <nom> item <diamand|emeraude>                    (générateurs communs de la map)
 /bd <nom> forge <couleur>                            (crée fer+or de l'équipe, accélérés par l'amélioration Forge)
+/bd <nom> chest <couleur>                            (ajoute le coffre visé à l'équipe, vidé à chaque partie)
 /bd <nom> geninfo                                    (liste les générateurs pour diagnostiquer)
 /bd <nom> reset                                      (réinitialise immédiatement, même en pleine partie)
 /bd <nom> shop <shop|upgrade> color <couleur> [pseudo]   (pseudo optionnel = skin du PNJ)
@@ -71,6 +84,26 @@ et le shade-plugin). Nécessite un JDK 21+ et Maven.
 
 Permission `bedwars.admin` (op par défaut) pour tout ce qui configure/supprime une arène ;
 `bedwars.join` (tout le monde par défaut) pour rejoindre une partie.
+
+## Historique des versions
+
+### Nouveautés (v17)
+
+- **Construction strictement limitée à la zone de jeu** : pendant une partie, tout bloc
+  placé en dehors des limites définies par `pos1`/`pos2` — en hauteur, sur les côtés ou
+  en dessous — est désormais annulé, avec un message d'avertissement pour le joueur. Le
+  mode édition (`/bd <nom> edit`) n'est pas concerné : un admin peut toujours construire
+  librement pour configurer la map.
+- **Bug corrigé : les PNJ marchand/amélioration ne se font plus disparaître entre eux** :
+  le nettoyage anti-doublons balayait un rayon de 3 blocs autour d'un nouveau PNJ, ce qui
+  supprimait aussi le PNJ voisin (le marchand et l'amélioration d'une même équipe sont
+  souvent placés côte à côte). Le rayon de nettoyage est maintenant réduit à l'emplacement
+  exact (0,5 bloc) : il détecte toujours les vrais doublons, sans jamais toucher un autre
+  PNJ placé juste à côté.
+- **Map toujours propre à chaque partie** : tous les items et minerais laissés au sol dans
+  la zone de jeu sont automatiquement nettoyés au début ET à la fin de chaque partie (y
+  compris après un `/bd <nom> reset`), pour repartir sur une map impeccable à chaque
+  lancement.
 
 ## Nouveautés de cette itération
 

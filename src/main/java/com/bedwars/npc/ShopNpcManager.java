@@ -16,7 +16,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.LeatherArmorMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.persistence.PersistentDataType;
-import com.destroystokyo.paper.profile.PlayerProfile;
+import org.bukkit.profile.PlayerProfile;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -152,7 +152,7 @@ public class ShopNpcManager {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {
                 PlayerProfile profile = Bukkit.createProfile(skinName);
-                profile.complete(true); // appel réseau bloquant -> hors thread principal
+                profile.update().join(); // appel réseau bloquant -> hors thread principal
                 Bukkit.getScheduler().runTask(plugin, () -> {
                     if (!npc.isValid()) return;
                     ItemStack head = npc.getEquipment().getHelmet();

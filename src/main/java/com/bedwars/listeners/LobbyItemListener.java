@@ -128,7 +128,9 @@ public class LobbyItemListener implements Listener {
         }
 
         instance.setPreferredTeam(player.getUniqueId(), color);
-        player.getInventory().setItem(LobbyItemUtil.SLOT_TEAM_SELECT, LobbyItemUtil.createTeamSelectItem(color));
+        int blockSlot = plugin.getPlayerPrefsManager().getSlot(player.getUniqueId(),
+                com.bedwars.util.PlayerPrefsManager.BLOCK, LobbyItemUtil.SLOT_TEAM_SELECT);
+        player.getInventory().setItem(blockSlot, LobbyItemUtil.createTeamSelectItem(color));
         player.sendMessage(ChatColor.GREEN + "Vous avez choisi l'équipe " + color.getColoredName() + ChatColor.GREEN + " !");
         player.closeInventory();
     }

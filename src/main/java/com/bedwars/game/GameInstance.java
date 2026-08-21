@@ -109,7 +109,9 @@ public class GameInstance {
         if (player.hasPermission("bedwars.admin")) {
             player.getInventory().setItem(LobbyItemUtil.SLOT_FORCE_START, LobbyItemUtil.createForceStartItem());
         }
-        player.getInventory().setItem(LobbyItemUtil.SLOT_TEAM_SELECT, LobbyItemUtil.createTeamSelectItem());
+        int blockSlot = plugin.getPlayerPrefsManager().getSlot(player.getUniqueId(),
+                com.bedwars.util.PlayerPrefsManager.BLOCK, LobbyItemUtil.SLOT_TEAM_SELECT);
+        player.getInventory().setItem(blockSlot, LobbyItemUtil.createTeamSelectItem());
         player.getInventory().setItem(LobbyItemUtil.SLOT_LEAVE, LobbyItemUtil.createLeaveItem());
     }
 
@@ -236,6 +238,8 @@ public class GameInstance {
         killAllDragons();
         // Idem pour les minerais/items qui traîneraient encore au sol d'une partie précédente.
         clearGroundItems();
+        // Et pour le contenu des coffres d'équipe (normaux + ender des joueurs) d'une partie précédente.
+        clearAllChests();
         // Sécurité supplémentaire : les améliorations d'équipe repartent toujours de zéro à
         // chaque lancement (elles le sont déjà de fait, chaque partie utilisant une instance
         // fraîche, mais on le garantit explicitement ici).
@@ -325,20 +329,36 @@ public class GameInstance {
         player.getInventory().setLeggings(dyed(Material.LEATHER_LEGGINGS, color));
         player.getInventory().setBoots(dyed(Material.LEATHER_BOOTS, color));
 
-        // Épée / hache / pioche : toujours aux 3 premiers slots de la hotbar (slots 1/2/3),
-        // au palier actuel du joueur (bois par défaut, voir downgradeTools). Verrouillés par
-        // KitProtectionListener : indroppables, indéplaçables, indupliquables.
+        // Épée : toujours donnée (palier bois par défaut). Hache/pioche : PAS données au
+        // spawn — il faut d'abord les débloquer (gratuitement, palier bois) dans le shop pour
+        // les avoir et les garder pour le reste de la partie. Verrouillés par KitProtectionListener :
+        // indroppables, indéplaçables, indupliquables. La position dans la hotbar est celle
+        // choisie par le joueur via /bd quickmenu (sinon la position par défaut).
         UUID uuid = player.getUniqueId();
-        SwordTier sTier = SwordTier.byLevel(getSwordTier(uuid));
-        ToolTier aTier = ToolTier.byLevel(getAxeTier(uuid));
-        ToolTier pTier = ToolTier.byLevel(getPickaxeTier(uuid));
+        var prefs = plugin.getPlayerPrefsManager();
+        int swordSlot = prefs.getSlot(uuid, com.bedwars.util.PlayerPrefsManager.SWORD, KitProtectionUtil.SLOT_SWORD);
+        int axeSlot = prefs.getSlot(uuid, com.bedwars.util.PlayerPrefsManager.AXE, KitProtectionUtil.SLOT_AXE);
+        int pickaxeSlot = prefs.getSlot(uuid, com.bedwars.util.PlayerPrefsManager.PICKAXE, KitProtectionUtil.SLOT_PICKAXE);
 
-        player.getInventory().setItem(KitProtectionUtil.SLOT_SWORD,
+        SwordTier sTier = SwordTier.byLevel(getSwordTier(uuid));
+        player.getInventory().setItem(swordSlot,
                 KitProtectionUtil.tagAsKitTool(new ItemStack(sTier.getMaterial()), "Épée"));
-        player.getInventory().setItem(KitProtectionUtil.SLOT_AXE,
-                KitProtectionUtil.tagAsKitTool(new ItemStack(aTier.getAxe()), "Hache"));
-        player.getInventory().setItem(KitProtectionUtil.SLOT_PICKAXE,
-                KitProtectionUtil.tagAsKitTool(new ItemStack(pTier.getPickaxe()), "Pioche"));
+
+        int axeLevel = getAxeTier(uuid);
+        if (axeLevel >= 0) {
+            player.getInventory().setItem(axeSlot,
+                    KitProtectionUtil.tagAsKitTool(new ItemStack(ToolTier.byLevel(axeLevel).getAxe()), "Hache"));
+        } else {
+            player.getInventory().setItem(axeSlot, null);
+        }
+
+        int pickaxeLevel = getPickaxeTier(uuid);
+        if (pickaxeLevel >= 0) {
+            player.getInventory().setItem(pickaxeSlot,
+                    KitProtectionUtil.tagAsKitTool(new ItemStack(ToolTier.byLevel(pickaxeLevel).getPickaxe()), "Pioche"));
+        } else {
+            player.getInventory().setItem(pickaxeSlot, null);
+        }
 
         applySharpnessToSword(player);
     }
@@ -351,12 +371,14 @@ public class GameInstance {
         swordTier.put(uuid, level);
     }
 
+    /** -1 = pas encore débloquée (aucune pioche en main), 0 = palier bois débloqué, etc. */
     public int getPickaxeTier(UUID uuid) {
-        return pickaxeTier.getOrDefault(uuid, ToolTier.WOOD.getLevel());
+        return pickaxeTier.getOrDefault(uuid, -1);
     }
 
+    /** -1 = pas encore débloquée (aucune hache en main), 0 = palier bois débloqué, etc. */
     public int getAxeTier(UUID uuid) {
-        return axeTier.getOrDefault(uuid, ToolTier.WOOD.getLevel());
+        return axeTier.getOrDefault(uuid, -1);
     }
 
     public void setPickaxeTier(UUID uuid, int level) {
@@ -367,11 +389,20 @@ public class GameInstance {
         axeTier.put(uuid, level);
     }
 
-    /** À chaque mort (non finale), épée/pioche/hache redescendent d'un palier (jamais en dessous du bois). */
+    /**
+     * À chaque mort (non finale) : l'épée redescend d'un palier (jamais en dessous du bois, qui
+     * fait partie du kit de base). La pioche/hache ne redescendent que si elles ont été
+     * débloquées ET améliorées au-delà du bois — le palier bois, une fois débloqué, reste acquis
+     * pour toujours (jamais retiré) ; tant qu'elles ne sont jamais débloquées, rien ne change.
+     */
     private void downgradeTools(UUID uuid) {
         swordTier.put(uuid, Math.max(SwordTier.WOOD.getLevel(), getSwordTier(uuid) - 1));
-        pickaxeTier.put(uuid, Math.max(ToolTier.WOOD.getLevel(), getPickaxeTier(uuid) - 1));
-        axeTier.put(uuid, Math.max(ToolTier.WOOD.getLevel(), getAxeTier(uuid) - 1));
+        if (getPickaxeTier(uuid) > ToolTier.WOOD.getLevel()) {
+            pickaxeTier.put(uuid, getPickaxeTier(uuid) - 1);
+        }
+        if (getAxeTier(uuid) > ToolTier.WOOD.getLevel()) {
+            axeTier.put(uuid, getAxeTier(uuid) - 1);
+        }
     }
 
     /**
@@ -379,8 +410,10 @@ public class GameInstance {
      * verrouillage (tag) ni l'enchantement Sharpness en cours (voir applySharpnessToSword).
      */
     public void refreshSwordItem(Player player) {
+        int swordSlot = plugin.getPlayerPrefsManager().getSlot(player.getUniqueId(),
+                com.bedwars.util.PlayerPrefsManager.SWORD, KitProtectionUtil.SLOT_SWORD);
         SwordTier tier = SwordTier.byLevel(getSwordTier(player.getUniqueId()));
-        player.getInventory().setItem(KitProtectionUtil.SLOT_SWORD,
+        player.getInventory().setItem(swordSlot,
                 KitProtectionUtil.tagAsKitTool(new ItemStack(tier.getMaterial()), "Épée"));
         applySharpnessToSword(player);
     }
@@ -396,14 +429,16 @@ public class GameInstance {
         if (color != null && teamUpgrades.containsKey(color)) {
             level = teamUpgrades.get(color).getSharpenedBlades();
         }
-        ItemStack sword = player.getInventory().getItem(KitProtectionUtil.SLOT_SWORD);
+        int swordSlot = plugin.getPlayerPrefsManager().getSlot(player.getUniqueId(),
+                com.bedwars.util.PlayerPrefsManager.SWORD, KitProtectionUtil.SLOT_SWORD);
+        ItemStack sword = player.getInventory().getItem(swordSlot);
         if (sword == null || !KitProtectionUtil.isKitTool(sword)) return;
         if (level > 0) {
             sword.addUnsafeEnchantment(org.bukkit.enchantments.Enchantment.SHARPNESS, level);
         } else {
             sword.removeEnchantment(org.bukkit.enchantments.Enchantment.SHARPNESS);
         }
-        player.getInventory().setItem(KitProtectionUtil.SLOT_SWORD, sword);
+        player.getInventory().setItem(swordSlot, sword);
     }
 
     private ItemStack dyed(Material material, TeamColor color) {
@@ -684,17 +719,27 @@ public class GameInstance {
         return forgeLevel >= 4 ? 120 : 0;
     }
 
-    /** Les items de la forge apparaissent dispersés dans une zone de 3x3 blocs autour de l'ancre. */
+    /** Les items de la forge apparaissent dispersés dans un LÉGER rayon autour de l'ancre, sans être éjectés. */
     private void dropForgeBonus(Location loc, Material material) {
-        loc.getWorld().dropItem(randomizeWithinZone(loc, 3), new ItemStack(material, 1));
+        dropStatic(loc.getWorld(), randomizeWithinZone(loc, 1), new ItemStack(material, 1));
     }
 
     /** Retourne un point aléatoire dans une zone carrée de {@code size} blocs de côté, centrée sur loc. */
-    private Location randomizeWithinZone(Location loc, int size) {
-        double half = (size - 1) / 2.0;
+    private Location randomizeWithinZone(Location loc, double size) {
+        double half = size / 2.0;
         double dx = (Math.random() * size) - half;
         double dz = (Math.random() * size) - half;
         return loc.clone().add(0.5 + dx, 0.2, 0.5 + dz);
+    }
+
+    /**
+     * Fait apparaître un item exactement là où on le demande, avec une vitesse nulle : il ne
+     * "s'éjecte" pas (pas de petit saut/glissade aléatoire comme avec dropItem par défaut).
+     */
+    private Item dropStatic(org.bukkit.World world, Location loc, ItemStack stack) {
+        Item item = world.dropItem(loc, stack);
+        item.setVelocity(new org.bukkit.util.Vector(0, 0, 0));
+        return item;
     }
 
     private long getIntervalFor(GeneratorType type) {
@@ -726,7 +771,7 @@ public class GameInstance {
             }
         }
         if (nearby.isEmpty()) {
-            gen.getLocation().getWorld().dropItem(gen.getLocation().clone().add(0.5, 0.2, 0.5),
+            dropStatic(gen.getLocation().getWorld(), gen.getLocation().clone().add(0.5, 0.2, 0.5),
                     new ItemStack(gen.getType().getMaterial(), 1));
         } else {
             for (Player p : nearby) {
@@ -752,7 +797,7 @@ public class GameInstance {
         int cap = forgeGroundCap(gen.getType(), forgeLevel);
         if (cap >= 0 && alive.size() >= cap) return;
 
-        Item item = gen.getLocation().getWorld().dropItem(randomizeWithinZone(gen.getLocation(), 3),
+        Item item = dropStatic(gen.getLocation().getWorld(), randomizeWithinZone(gen.getLocation(), 1),
                 new ItemStack(gen.getType().getMaterial(), 1));
         alive.add(item.getUniqueId());
     }
@@ -777,7 +822,7 @@ public class GameInstance {
                 : plugin.getConfig().getInt("generators.emerald-max-per-spawner", 4);
         if (alive.size() >= cap) return;
 
-        Item item = gen.getLocation().getWorld().dropItem(gen.getLocation().clone().add(0.5, 0.2, 0.5),
+        Item item = dropStatic(gen.getLocation().getWorld(), gen.getLocation().clone().add(0.5, 0.2, 0.5),
                 new ItemStack(gen.getType().getMaterial(), 1));
         alive.add(item.getUniqueId());
     }
@@ -898,6 +943,23 @@ public class GameInstance {
         if (dragonTargetingTask != null) {
             dragonTargetingTask.cancel();
             dragonTargetingTask = null;
+        }
+    }
+
+    /** Vide tous les coffres d'équipe (normaux) et les coffres ender des participants (début ET fin de partie). */
+    private void clearAllChests() {
+        for (ArenaTeam team : arena.getTeams().values()) {
+            for (Location loc : team.getChestLocations()) {
+                if (loc.getWorld() == null) continue;
+                org.bukkit.block.BlockState state = loc.getBlock().getState();
+                if (state instanceof org.bukkit.block.Chest chest) {
+                    chest.getInventory().clear();
+                }
+            }
+        }
+        for (UUID uuid : getAllParticipantIds()) {
+            Player p = Bukkit.getPlayer(uuid);
+            if (p != null) p.getEnderChest().clear();
         }
     }
 
@@ -1139,6 +1201,7 @@ public class GameInstance {
         removeGeneratorHolograms();
         killAllDragons();
         clearGroundItems();
+        clearAllChests();
     }
 
     // ---------------------------------------------------------------

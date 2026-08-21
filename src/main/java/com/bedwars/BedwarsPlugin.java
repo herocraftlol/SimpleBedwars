@@ -35,6 +35,7 @@ public class BedwarsPlugin extends JavaPlugin {
     private ShopGUIManager shopGUIManager;
     private ShopConfigManager shopConfigManager;
     private UpgradeGUIManager upgradeGUIManager;
+    private com.bedwars.util.PlayerPrefsManager playerPrefsManager;
 
     @Override
     public void onEnable() {
@@ -54,6 +55,7 @@ public class BedwarsPlugin extends JavaPlugin {
         this.shopConfigManager = new ShopConfigManager(this);
         this.shopGUIManager = new ShopGUIManager(this);
         this.upgradeGUIManager = new UpgradeGUIManager(this);
+        this.playerPrefsManager = new com.bedwars.util.PlayerPrefsManager(this);
 
         arenaManager.loadAll();
         // Nettoyage définitif de l'ancien PNJ hub (fonctionnalité remplacée par /bd arene gui) :
@@ -61,6 +63,7 @@ public class BedwarsPlugin extends JavaPlugin {
         adminNPCManager.purgeLegacyNpc();
         shopConfigManager.load();
         shopNpcManager.spawnAll();
+        playerPrefsManager.load();
 
         BedwarsCommand command = new BedwarsCommand(this);
         getCommand("bd").setExecutor(command);
@@ -133,5 +136,9 @@ public class BedwarsPlugin extends JavaPlugin {
 
     public UpgradeGUIManager getUpgradeGUIManager() {
         return upgradeGUIManager;
+    }
+
+    public com.bedwars.util.PlayerPrefsManager getPlayerPrefsManager() {
+        return playerPrefsManager;
     }
 }

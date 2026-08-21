@@ -30,7 +30,7 @@ public class PlayerProtectionListener implements Listener {
         Arena arena = game.getArena();
 
         if ((arena.getState() == ArenaState.PLAYING || arena.getState() == ArenaState.SUDDEN_DEATH)
-                && !isWithinGameZone(arena, event.getBlock().getLocation())) {
+                && !isWithinGameZone(arena, event.getBlock().getLocation(), 0, 0)) {
             event.setCancelled(true);
             event.getPlayer().sendMessage(ChatColor.RED + "Vous ne pouvez pas construire en dehors de la zone de jeu.");
             return;
@@ -39,19 +39,25 @@ public class PlayerProtectionListener implements Listener {
         game.trackPlacedBlock(event.getBlock().getLocation());
     }
 
-    private boolean isWithinGameZone(Arena arena, Location blockLoc) {
+    /**
+     * true si loc est dans la zone de jeu (pos1/pos2), avec une marge optionnelle : {@code marginXZ}
+     * de chaque côté (X/Z), {@code marginY} au-dessus ET en dessous. Marges à 0 = zone stricte
+     * (utilisé pour interdire de construire hors-zone) ; marges larges = pour laisser les
+     * spectateurs se déplacer dans toute la map sans être bridés au moindre pas de trop.
+     */
+    private boolean isWithinGameZone(Arena arena, Location loc, int marginXZ, int marginY) {
         Location pos1 = arena.getGamePos1();
         Location pos2 = arena.getGamePos2();
-        if (pos1 == null || pos2 == null || !blockLoc.getWorld().equals(pos1.getWorld())) return true;
+        if (pos1 == null || pos2 == null || !loc.getWorld().equals(pos1.getWorld())) return true;
 
-        int minX = Math.min(pos1.getBlockX(), pos2.getBlockX());
-        int maxX = Math.max(pos1.getBlockX(), pos2.getBlockX());
-        int minY = Math.min(pos1.getBlockY(), pos2.getBlockY());
-        int maxY = Math.max(pos1.getBlockY(), pos2.getBlockY());
-        int minZ = Math.min(pos1.getBlockZ(), pos2.getBlockZ());
-        int maxZ = Math.max(pos1.getBlockZ(), pos2.getBlockZ());
+        int minX = Math.min(pos1.getBlockX(), pos2.getBlockX()) - marginXZ;
+        int maxX = Math.max(pos1.getBlockX(), pos2.getBlockX()) + marginXZ;
+        int minY = Math.min(pos1.getBlockY(), pos2.getBlockY()) - marginY;
+        int maxY = Math.max(pos1.getBlockY(), pos2.getBlockY()) + marginY;
+        int minZ = Math.min(pos1.getBlockZ(), pos2.getBlockZ()) - marginXZ;
+        int maxZ = Math.max(pos1.getBlockZ(), pos2.getBlockZ()) + marginXZ;
 
-        int bx = blockLoc.getBlockX(), by = blockLoc.getBlockY(), bz = blockLoc.getBlockZ();
+        int bx = loc.getBlockX(), by = loc.getBlockY(), bz = loc.getBlockZ();
         return bx >= minX && bx <= maxX && by >= minY && by <= maxY && bz >= minZ && bz <= maxZ;
     }
 
@@ -64,14 +70,17 @@ public class PlayerProtectionListener implements Listener {
         Arena arena = game.getArena();
 
         if (player.getGameMode() == GameMode.SPECTATOR) {
-            Location center = arena.getSpectatorSpawnLocation() != null
-                    ? arena.getSpectatorSpawnLocation() : arena.getSpecLocation();
-            if (center == null) return;
-
             Location to = event.getTo();
             if (to == null) return;
-            if (!plugin.getWaitingLobbyManager().isWithin(arena, to) && !isNear(to, center, 60)) {
-                // Le spectateur essaie de sortir trop loin de la zone prévue : on le replace.
+
+            boolean inLobbyCage = plugin.getWaitingLobbyManager().isWithin(arena, to);
+            boolean inGameZone = isWithinGameZone(arena, to, 20, 30);
+            if (inLobbyCage || inGameZone) return;
+
+            // Ni dans la cage du lobby, ni dans la zone de jeu (même élargie) : trop loin, on replace.
+            Location center = arena.getSpectatorSpawnLocation() != null
+                    ? arena.getSpectatorSpawnLocation() : arena.getSpecLocation();
+            if (center != null) {
                 event.setTo(center);
             }
             return;
@@ -85,11 +94,6 @@ public class PlayerProtectionListener implements Listener {
                 player.setHealth(0.0);
             }
         }
-    }
-
-    private boolean isNear(Location loc, Location center, double radius) {
-        if (!loc.getWorld().equals(center.getWorld())) return false;
-        return loc.distanceSquared(center) <= radius * radius;
     }
 
     @EventHandler

@@ -110,12 +110,12 @@ public class ShopGUIManager {
     private void populateTools(Player player, ShopHolder holder, Inventory inv) {
         GameInstance instance = plugin.getGameManager().getInstance(
                 plugin.getArenaManager().getArena(holder.getArenaName()));
-        ToolTier pTier = ToolTier.byLevel(instance.getPickaxeTier(player.getUniqueId()));
-        ToolTier aTier = ToolTier.byLevel(instance.getAxeTier(player.getUniqueId()));
+        int pLevel = instance.getPickaxeTier(player.getUniqueId());
+        int aLevel = instance.getAxeTier(player.getUniqueId());
         SwordTier sTier = SwordTier.byLevel(instance.getSwordTier(player.getUniqueId()));
 
-        inv.setItem(SLOT_PICKAXE, toolUpgradeItem("Pioche", pTier));
-        inv.setItem(SLOT_AXE, toolUpgradeItem("Hache", aTier));
+        inv.setItem(SLOT_PICKAXE, toolUpgradeItem("Pioche", pLevel));
+        inv.setItem(SLOT_AXE, toolUpgradeItem("Hache", aLevel));
         inv.setItem(SLOT_SWORD, swordUpgradeItem(sTier));
     }
 
@@ -142,9 +142,21 @@ public class ShopGUIManager {
         };
     }
 
-    private ItemStack toolUpgradeItem(String name, ToolTier current) {
-        ToolTier next = current.next();
+    /** level = -1 signifie "pas encore achetée" : le palier bois (payant) sert alors de premier achat. */
+    private ItemStack toolUpgradeItem(String name, int level) {
         List<String> lore = new ArrayList<>();
+        if (level < 0) {
+            ToolTier first = ToolTier.WOOD;
+            Material icon = name.equals("Pioche") ? first.getPickaxe() : first.getAxe();
+            lore.add(ChatColor.GRAY + "Vous n'avez pas encore de " + name.toLowerCase() + ".");
+            lore.add("");
+            lore.add(ChatColor.GOLD + "Prix: " + ChatColor.WHITE + first.getPrice() + " " + currencyLabel(first.getCurrency()));
+            lore.add(ChatColor.YELLOW + "Cliquez pour l'acheter !");
+            return pane(icon, ChatColor.AQUA + "" + ChatColor.BOLD + name, lore);
+        }
+
+        ToolTier current = ToolTier.byLevel(level);
+        ToolTier next = current.next();
         lore.add(ChatColor.GRAY + "Palier actuel: " + ChatColor.YELLOW + tierLabel(current));
         lore.add("");
         if (current == next) {
@@ -160,8 +172,8 @@ public class ShopGUIManager {
     private String tierLabel(ToolTier tier) {
         return switch (tier) {
             case WOOD -> "Bois";
+            case STONE -> "Pierre";
             case IRON -> "Fer";
-            case GOLD -> "Or";
             case DIAMOND -> "Diamant";
         };
     }
@@ -273,10 +285,12 @@ public class ShopGUIManager {
         if (slot != SLOT_PICKAXE && slot != SLOT_AXE) return;
         boolean isPickaxe = slot == SLOT_PICKAXE;
         int currentLevel = isPickaxe ? instance.getPickaxeTier(player.getUniqueId()) : instance.getAxeTier(player.getUniqueId());
-        ToolTier current = ToolTier.byLevel(currentLevel);
-        ToolTier next = current.next();
 
-        if (next == current) {
+        // Palier suivant : si jamais achetée (-1), le tout premier achat est le palier bois
+        // (payant, comme les autres) ; sinon le palier suivant celui déjà possédé.
+        ToolTier next = currentLevel < 0 ? ToolTier.WOOD : ToolTier.byLevel(currentLevel).next();
+        boolean alreadyMaxed = currentLevel >= 0 && ToolTier.byLevel(currentLevel) == next;
+        if (alreadyMaxed) {
             player.sendMessage(ChatColor.RED + "Palier déjà maximum.");
             return;
         }
@@ -287,10 +301,12 @@ public class ShopGUIManager {
         }
         EconomyUtil.removeCurrency(player, next.getCurrency(), next.getPrice());
 
-        int fixedSlot = isPickaxe ? com.bedwars.util.KitProtectionUtil.SLOT_PICKAXE : com.bedwars.util.KitProtectionUtil.SLOT_AXE;
+        String prefKey = isPickaxe ? com.bedwars.util.PlayerPrefsManager.PICKAXE : com.bedwars.util.PlayerPrefsManager.AXE;
+        int defaultSlot = isPickaxe ? com.bedwars.util.KitProtectionUtil.SLOT_PICKAXE : com.bedwars.util.KitProtectionUtil.SLOT_AXE;
+        int targetSlot = plugin.getPlayerPrefsManager().getSlot(player.getUniqueId(), prefKey, defaultSlot);
         Material newMaterial = isPickaxe ? next.getPickaxe() : next.getAxe();
         String label = isPickaxe ? "Pioche" : "Hache";
-        player.getInventory().setItem(fixedSlot,
+        player.getInventory().setItem(targetSlot,
                 com.bedwars.util.KitProtectionUtil.tagAsKitTool(new ItemStack(newMaterial), label));
 
         if (isPickaxe) {
@@ -299,7 +315,9 @@ public class ShopGUIManager {
             instance.setAxeTier(player.getUniqueId(), next.getLevel());
         }
 
-        player.sendMessage(ChatColor.GREEN + "Palier amélioré: " + ChatColor.WHITE + tierLabel(next));
+        String verb = currentLevel < 0 ? "Achetée: " : "Palier amélioré: ";
+        player.sendMessage(ChatColor.GREEN + verb + ChatColor.WHITE + label + " " + tierLabel(next)
+                + (currentLevel < 0 ? ChatColor.GRAY + " (vous la garderez pour le reste de la partie)" : ""));
         player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1f, 1f);
         populate(player, arena, topInventory, holder);
     }

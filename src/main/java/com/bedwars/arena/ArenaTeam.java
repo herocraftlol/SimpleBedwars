@@ -22,6 +22,8 @@ public class ArenaTeam {
     /** Point d'ancrage de la "forge de base" : c'est là que les bonus diamant/émeraude de la
      *  Forge (Amélioration d'équipe) apparaissent, à partir du palier 3 (voir GameInstance). */
     private Location forgeLocation;
+    /** Emplacements des coffres de l'équipe (une équipe peut en avoir plusieurs). */
+    private final java.util.List<Location> chestLocations = new java.util.ArrayList<>();
 
     // État runtime (partie en cours)
     private boolean bedDestroyed = false;
@@ -79,6 +81,10 @@ public class ArenaTeam {
 
     public void setForgeLocation(Location forgeLocation) {
         this.forgeLocation = forgeLocation;
+    }
+
+    public java.util.List<Location> getChestLocations() {
+        return chestLocations;
     }
 
     public boolean isBedDestroyed() {

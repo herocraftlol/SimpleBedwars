@@ -91,6 +91,11 @@ public class ArenaManager {
             LocationUtil.save(config, base + ".shop", team.getShopLocation());
             LocationUtil.save(config, base + ".upgrade", team.getUpgradeLocation());
             LocationUtil.save(config, base + ".forge", team.getForgeLocation());
+            int ci = 0;
+            for (Location chestLoc : team.getChestLocations()) {
+                LocationUtil.save(config, base + ".chests." + ci, chestLoc);
+                ci++;
+            }
         }
 
         int gi = 0;
@@ -157,6 +162,12 @@ public class ArenaManager {
                 team.setShopLocation(LocationUtil.load(config, base + ".shop"));
                 team.setUpgradeLocation(LocationUtil.load(config, base + ".upgrade"));
                 team.setForgeLocation(LocationUtil.load(config, base + ".forge"));
+                if (config.isConfigurationSection(base + ".chests")) {
+                    for (String chestKey : Objects.requireNonNull(config.getConfigurationSection(base + ".chests")).getKeys(false)) {
+                        Location chestLoc = LocationUtil.load(config, base + ".chests." + chestKey);
+                        if (chestLoc != null) team.getChestLocations().add(chestLoc);
+                    }
+                }
             }
         }
 
@@ -249,6 +260,9 @@ public class ArenaManager {
             dstTeam.setShopLocation(translate(srcTeam.getShopLocation(), dx, dy, dz, newWorld));
             dstTeam.setUpgradeLocation(translate(srcTeam.getUpgradeLocation(), dx, dy, dz, newWorld));
             dstTeam.setForgeLocation(translate(srcTeam.getForgeLocation(), dx, dy, dz, newWorld));
+            for (Location chestLoc : srcTeam.getChestLocations()) {
+                dstTeam.getChestLocations().add(translate(chestLoc, dx, dy, dz, newWorld));
+            }
         }
 
         for (Generator gen : source.getGenerators()) {

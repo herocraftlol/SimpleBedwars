@@ -3,17 +3,19 @@ package com.bedwars.shop;
 import org.bukkit.Material;
 
 /**
- * Paliers de pioche/hache de l'onglet spécial "Tools" du shop : bois -> fer -> or -> diamant.
- * Comportement façon Hypixel Bedwars : à chaque mort, l'outil redescend d'un palier
- * (voir GameInstance#giveKit / #downgradeTools), jusqu'au palier bois qui, lui, est
- * définitivement acquis et ne redescend jamais plus bas (il fait partie du kit de base).
+ * Paliers de pioche/hache de l'onglet spécial "Tools" du shop : bois -> pierre -> fer -> diamant
+ * (mêmes noms de palier que l'épée, voir SwordTier). Contrairement à l'épée, aucun palier n'est
+ * gratuit : il faut acheter le palier bois pour avoir sa toute première pioche/hache.
+ * Comportement façon Hypixel Bedwars : à chaque mort, l'outil redescend d'un palier une fois
+ * acheté (voir GameInstance#downgradeTools), jusqu'au palier bois qui, lui, reste définitivement
+ * acquis une fois obtenu (ne redescend jamais plus bas, ni ne disparaît).
  */
 public enum ToolTier {
 
-    WOOD(0, Material.WOODEN_PICKAXE, Material.WOODEN_AXE, null, 0),
-    IRON(1, Material.IRON_PICKAXE, Material.IRON_AXE, Material.IRON_INGOT, 10),
-    GOLD(2, Material.GOLDEN_PICKAXE, Material.GOLDEN_AXE, Material.GOLD_INGOT, 6),
-    DIAMOND(3, Material.DIAMOND_PICKAXE, Material.DIAMOND_AXE, Material.EMERALD, 4);
+    WOOD(0, Material.WOODEN_PICKAXE, Material.WOODEN_AXE, Material.IRON_INGOT, 10),
+    STONE(1, Material.STONE_PICKAXE, Material.STONE_AXE, Material.IRON_INGOT, 10),
+    IRON(2, Material.IRON_PICKAXE, Material.IRON_AXE, Material.GOLD_INGOT, 4),
+    DIAMOND(3, Material.DIAMOND_PICKAXE, Material.DIAMOND_AXE, Material.GOLD_INGOT, 12);
 
     private final int level;
     private final Material pickaxe;
@@ -41,7 +43,6 @@ public enum ToolTier {
         return axe;
     }
 
-    /** null pour le palier bois (gratuit, toujours acquis). */
     public Material getCurrency() {
         return currency;
     }
@@ -57,6 +58,7 @@ public enum ToolTier {
         return WOOD;
     }
 
+    /** Palier suivant celui donné ; à appeler uniquement pour level >= 0 (voir ToolTier.WOOD pour level == -1, "pas encore achetée"). */
     public ToolTier next() {
         return byLevel(Math.min(level + 1, DIAMOND.level));
     }

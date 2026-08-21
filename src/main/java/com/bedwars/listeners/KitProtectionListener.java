@@ -15,20 +15,19 @@ import org.bukkit.inventory.PlayerInventory;
 
 /**
  * Empêche toute manipulation des items protégés d'un joueur en partie/lobby :
- *  - les 3 outils du kit de base (épée slot 1, hache slot 2, pioche slot 3 — voir KitProtectionUtil) ;
- *  - les 3 items spéciaux du lobby d'attente (diamant "forcer le lancement" au slot 1,
- *    bloc "choisir son équipe" au slot 3, barrière "quitter" au slot 5).
+ *  - les 3 outils du kit de base (épée/hache/pioche — voir KitProtectionUtil) ;
+ *  - les 3 items spéciaux du lobby d'attente (diamant "forcer le lancement", bloc "choisir son
+ *    équipe", barrière "quitter" — voir LobbyItemUtil).
  * Impossible de les drop, déplacer, dupliquer, échanger avec la main secondaire, ou les
  * sortir de quelque façon que ce soit tant que le joueur est en jeu/en lobby.
+ *
+ * Volontairement basé sur le CONTENU (tag) des items plutôt que sur des numéros de slot fixes :
+ * chaque joueur peut personnaliser la position de ses items via /bd quickmenu (voir
+ * PlayerPrefsManager), donc la protection doit suivre l'item où qu'il se trouve.
  */
 public class KitProtectionListener implements Listener {
 
     private final BedwarsPlugin plugin;
-    /** Slots protégés dans la hotbar : 0-2 (outils du kit) et 4 (bouton quitter du lobby). */
-    private static final int[] PROTECTED_SLOTS = {
-            KitProtectionUtil.SLOT_SWORD, KitProtectionUtil.SLOT_AXE, KitProtectionUtil.SLOT_PICKAXE,
-            LobbyItemUtil.SLOT_LEAVE
-    };
 
     public KitProtectionListener(BedwarsPlugin plugin) {
         this.plugin = plugin;
@@ -79,27 +78,19 @@ public class KitProtectionListener implements Listener {
             return; // pas l'inventaire du joueur (un shop/GUI custom est déjà géré ailleurs)
         }
 
-        // Les slots protégés eux-mêmes : jamais touchables (empêche de les remplacer / les sortir).
-        if (event.getClickedInventory() instanceof PlayerInventory) {
-            for (int protectedSlot : PROTECTED_SLOTS) {
-                if (event.getSlot() == protectedSlot && isLocked(event.getClickedInventory().getItem(protectedSlot))) {
-                    event.setCancelled(true);
-                    return;
-                }
-            }
-        }
-
-        // L'item cliqué ou sous le curseur est protégé : bloque tout déplacement.
+        // L'item cliqué ou sous le curseur est protégé : bloque tout déplacement, quel que soit
+        // le slot où il se trouve (personnalisable via /bd quickmenu).
         if (isLocked(event.getCurrentItem()) || isLocked(event.getCursor())) {
             event.setCancelled(true);
             return;
         }
 
-        // Échange via une touche numérique (1-9) impliquant un slot protégé de la hotbar.
-        for (int protectedSlot : PROTECTED_SLOTS) {
-            if (event.getHotbarButton() == protectedSlot && isLocked(player.getInventory().getItem(protectedSlot))) {
+        // Échange via une touche numérique (1-9) : vérifie le contenu réel du slot de hotbar visé,
+        // peu importe lequel (pas de liste figée, pour suivre les positions personnalisées).
+        if (event.getHotbarButton() >= 0) {
+            ItemStack hotbarItem = player.getInventory().getItem(event.getHotbarButton());
+            if (isLocked(hotbarItem)) {
                 event.setCancelled(true);
-                return;
             }
         }
     }

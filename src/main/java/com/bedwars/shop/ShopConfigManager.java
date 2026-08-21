@@ -152,7 +152,8 @@ public class ShopConfigManager {
         setItemSilent("utility", slot++, new ShopItem(Material.GOLDEN_APPLE, 1, Material.GOLD_INGOT, 3));
         setItemSilent("utility", slot++, new ShopItem(Material.ENDER_PEARL, 1, Material.EMERALD, 4));
         setItemSilent("utility", slot++, new ShopItem(Material.WATER_BUCKET, 1, Material.GOLD_INGOT, 2));
-        setItemSilent("utility", slot, new ShopItem(Material.TNT, 1, Material.GOLD_INGOT, 4));
+        setItemSilent("utility", slot++, new ShopItem(Material.TNT, 1, Material.GOLD_INGOT, 4));
+        setItemSilent("utility", slot, new ShopItem(Material.FIRE_CHARGE, 1, Material.IRON_INGOT, 40));
     }
 
     private void setItemSilent(String category, int slot, ShopItem item) {
