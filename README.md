@@ -6,23 +6,23 @@ personnalisables, générateurs de ressources, shop et améliorations d'équipe 
 PNJ vendeurs à skin de joueur, lobby d'attente flottant, pièges, mort subite avec dragons —
 le tout **sans aucune dépendance externe**.
 
-## ✨ Nouveautés de la v1.0.16
+## ✨ Nouveautés de la v1.0.17
 
-- **TNT façon Hypixel** : elle s'amorce toute seule dès qu'elle est posée (plus besoin de
-  briquet), et son explosion ne détruit **que les blocs posés par les joueurs** pendant la
-  partie — jamais la structure d'origine de la map.
-- **Forge rééquilibrée** : les minerais ne sont plus envoyés directement dans l'inventaire
-  des joueurs, ils restent au sol à l'emplacement de la Forge — il faut aller les ramasser.
-  La vitesse de base fer/or est divisée par deux (fer : 1/2 s, or : 1/4 s) et un plafond au
-  sol évite l'accumulation infinie (24 fer / 12 or de base, +8/+4 par palier, illimité au
-  palier 4).
-- **Hologrammes de générateurs** : chaque générateur de diamant/émeraude affiche en temps
-  réel le compte à rebours avant le prochain spawn et son palier en chiffres romains
-  (ex : « Diamant II — 12 s »), synchronisé avec les phases d'accélération avant la mort
-  subite. Le palier actuel est aussi visible dans le scoreboard.
-- **Respawn avec compte à rebours** : après une mort non finale, le joueur passe en
-  spectateur pendant 5 secondes (compte à rebours affiché en grand à l'écran) puis
-  réapparaît automatiquement au spawn de son équipe.
+- **Construction strictement limitée à la zone de jeu** : pendant une partie, tout bloc
+  placé en dehors des limites définies par `pos1`/`pos2` — en hauteur, sur les côtés ou
+  en dessous — est désormais annulé, avec un message d'avertissement pour le joueur. Le
+  mode édition (`/bd <nom> edit`) n'est pas concerné : un admin peut toujours construire
+  librement pour configurer la map.
+- **Bug corrigé : les PNJ marchand/amélioration ne se font plus disparaître entre eux** :
+  le nettoyage anti-doublons balayait un rayon de 3 blocs autour d'un nouveau PNJ, ce qui
+  supprimait aussi le PNJ voisin (le marchand et l'amélioration d'une même équipe sont
+  souvent placés côte à côte). Le rayon de nettoyage est maintenant réduit à l'emplacement
+  exact (0,5 bloc) : il détecte toujours les vrais doublons, sans jamais toucher un autre
+  PNJ placé juste à côté.
+- **Map toujours propre à chaque partie** : tous les items et minerais laissés au sol dans
+  la zone de jeu sont automatiquement nettoyés au début ET à la fin de chaque partie (y
+  compris après un `/bd <nom> reset`), pour repartir sur une map impeccable à chaque
+  lancement.
 
 ## 📦 Installation
 
@@ -386,6 +386,23 @@ vient de la configuration (générateur manquant/mal placé) ou du code.
 - **Compte à rebours de 5 secondes après chaque mort non-finale** : le joueur passe en spectateur
   (peut observer la partie), un compte à rebours s'affiche en gros à l'écran (title), puis il
   réapparaît automatiquement à son spawn d'équipe à la fin — au lieu d'un respawn instantané.
+
+## Nouveautés / corrections (v14)
+
+- **Impossible de construire en dehors de la zone de jeu** : en hauteur, sur les côtés, ou même en
+  dessous — tout placement de bloc hors des limites définies par `pos1`/`pos2` est désormais annulé
+  pendant une partie active (`PlayerProtectionListener`). Le mode édition (`/bd <nom> edit`, arène en
+  `SETUP`) n'est pas concerné : un admin peut toujours construire librement pour configurer la map.
+- **Bug corrigé : placer un PNJ marchand/amélioration faisait disparaître le PNJ voisin.** Cause
+  trouvée : le nettoyage anti-doublons (`ShopNpcManager`) balayait un rayon de 3 blocs autour du
+  nouvel emplacement pour supprimer d'éventuels résidus — ce qui supprimait aussi n'importe quel
+  AUTRE PNJ placé à proximité (le marchand et l'amélioration d'une même équipe, souvent installés
+  côte à côte). Corrigé : le rayon de nettoyage est réduit à l'exact même emplacement (0,5 bloc), qui
+  suffit à détecter un vrai doublon sans jamais toucher un PNJ différent placé juste à côté.
+- **Les items/minerais au sol sont nettoyés au début ET à la fin de chaque partie** (dans la zone de
+  jeu définie par `pos1`/`pos2`), pour repartir sur une map propre à chaque lancement, sans résidus
+  d'une partie précédente (fonctionne aussi bien pour une fin de partie normale que pour un
+  `/bd <nom> reset`).
 
 ## Choix faits / hypothèses (à valider avec toi)
 

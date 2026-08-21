@@ -234,6 +234,8 @@ public class GameInstance {
         // Sécurité : supprime tout dragon qui traînerait encore d'une partie précédente non
         // terminée proprement, avant même que la nouvelle partie ne commence.
         killAllDragons();
+        // Idem pour les minerais/items qui traîneraient encore au sol d'une partie précédente.
+        clearGroundItems();
         // Sécurité supplémentaire : les améliorations d'équipe repartent toujours de zéro à
         // chaque lancement (elles le sont déjà de fait, chaque partie utilisant une instance
         // fraîche, mais on le garantit explicitement ici).
@@ -899,6 +901,28 @@ public class GameInstance {
         }
     }
 
+    /** Supprime tous les items/minerais qui traînent au sol dans la zone de jeu (début ET fin de partie). */
+    private void clearGroundItems() {
+        Location pos1 = arena.getGamePos1();
+        Location pos2 = arena.getGamePos2();
+        if (pos1 == null || pos2 == null || pos1.getWorld() == null) return;
+
+        double minX = Math.min(pos1.getX(), pos2.getX());
+        double maxX = Math.max(pos1.getX(), pos2.getX()) + 1;
+        double minY = Math.min(pos1.getY(), pos2.getY());
+        double maxY = Math.max(pos1.getY(), pos2.getY()) + 1;
+        double minZ = Math.min(pos1.getZ(), pos2.getZ());
+        double maxZ = Math.max(pos1.getZ(), pos2.getZ()) + 1;
+
+        org.bukkit.util.BoundingBox box = new org.bukkit.util.BoundingBox(minX, minY, minZ, maxX, maxY, maxZ);
+        for (org.bukkit.entity.Entity entity : pos1.getWorld().getNearbyEntities(box)) {
+            if (entity instanceof Item) {
+                entity.remove();
+            }
+        }
+        groundItems.clear();
+    }
+
     private TeamColor teamColorFromDragonName(String name) {
         if (name == null) return null;
         for (TeamColor color : TeamColor.values()) {
@@ -1114,6 +1138,7 @@ public class GameInstance {
         if (preciousTask != null) preciousTask.cancel();
         removeGeneratorHolograms();
         killAllDragons();
+        clearGroundItems();
     }
 
     // ---------------------------------------------------------------

@@ -127,11 +127,14 @@ public class ShopNpcManager {
 
     /**
      * Charge le chunk de cet emplacement et supprime tout PNJ marchand/amélioration résiduel
-     * trouvé à proximité (doublons d'anciennes sessions, ou re-configuration au même endroit).
+     * trouvé EXACTEMENT au même endroit (doublons d'anciennes sessions, ou re-configuration au
+     * même endroit). Rayon volontairement très petit : un rayon plus large supprimerait aussi un
+     * PNJ différent placé juste à côté (ex: le marchand et l'amélioration d'une même équipe, ou
+     * ceux d'une équipe voisine), ce qui les faisait disparaître les uns les autres.
      */
     private void purgeStrayNpcsNear(Location location) {
         location.getChunk().load();
-        for (Entity entity : location.getWorld().getNearbyEntities(location, 3, 3, 3)) {
+        for (Entity entity : location.getWorld().getNearbyEntities(location, 0.5, 0.5, 0.5)) {
             if (isOurNpc(entity)) {
                 registry.remove(entity.getUniqueId());
                 entity.remove();

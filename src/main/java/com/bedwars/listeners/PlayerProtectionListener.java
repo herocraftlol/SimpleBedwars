@@ -2,7 +2,10 @@ package com.bedwars.listeners;
 
 import com.bedwars.BedwarsPlugin;
 import com.bedwars.arena.Arena;
+import com.bedwars.arena.ArenaState;
 import com.bedwars.game.GameInstance;
+import org.bukkit.ChatColor;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -10,7 +13,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.GameMode;
 
 public class PlayerProtectionListener implements Listener {
 
@@ -20,11 +22,37 @@ public class PlayerProtectionListener implements Listener {
         this.plugin = plugin;
     }
 
+    /** Interdit de construire en dehors de la zone de jeu : en hauteur, sur les côtés, ou en dessous. */
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         GameInstance game = plugin.getGameManager().findInstanceOf(event.getPlayer());
         if (game == null) return;
+        Arena arena = game.getArena();
+
+        if ((arena.getState() == ArenaState.PLAYING || arena.getState() == ArenaState.SUDDEN_DEATH)
+                && !isWithinGameZone(arena, event.getBlock().getLocation())) {
+            event.setCancelled(true);
+            event.getPlayer().sendMessage(ChatColor.RED + "Vous ne pouvez pas construire en dehors de la zone de jeu.");
+            return;
+        }
+
         game.trackPlacedBlock(event.getBlock().getLocation());
+    }
+
+    private boolean isWithinGameZone(Arena arena, Location blockLoc) {
+        Location pos1 = arena.getGamePos1();
+        Location pos2 = arena.getGamePos2();
+        if (pos1 == null || pos2 == null || !blockLoc.getWorld().equals(pos1.getWorld())) return true;
+
+        int minX = Math.min(pos1.getBlockX(), pos2.getBlockX());
+        int maxX = Math.max(pos1.getBlockX(), pos2.getBlockX());
+        int minY = Math.min(pos1.getBlockY(), pos2.getBlockY());
+        int maxY = Math.max(pos1.getBlockY(), pos2.getBlockY());
+        int minZ = Math.min(pos1.getBlockZ(), pos2.getBlockZ());
+        int maxZ = Math.max(pos1.getBlockZ(), pos2.getBlockZ());
+
+        int bx = blockLoc.getBlockX(), by = blockLoc.getBlockY(), bz = blockLoc.getBlockZ();
+        return bx >= minX && bx <= maxX && by >= minY && by <= maxY && bz >= minZ && bz <= maxZ;
     }
 
     /** Empêche les spectateurs (et tout joueur mort sans lit) de sortir de la zone de spectateurs. */
