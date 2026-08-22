@@ -6,34 +6,17 @@ personnalisables, générateurs de ressources, shop et améliorations d'équipe 
 PNJ vendeurs à skin de joueur, lobby d'attente flottant, pièges, mort subite avec dragons —
 le tout **sans aucune dépendance externe**.
 
-## ✨ Nouveautés de la v1.0.18
+## ✨ Nouveautés de la v1.0.19
 
-- **`/bd quickmenu <épée|pioche|hache|bloc> <0-8>`** : chaque joueur personnalise lui-même
-  la position de son épée, sa pioche, sa hache (en partie) et du bloc « choisir son équipe »
-  (dans le lobby d'attente) dans sa hotbar. La préférence est individuelle et sauvegardée
-  (`playerprefs.yml`), puis appliquée automatiquement à chaque partie ou lobby suivant. La
-  protection anti-drop/déplacement suit désormais l'item lui-même plutôt qu'un numéro de
-  slot fixe : elle fonctionne donc quel que soit le slot choisi.
-- **`/bd <nom> chest <couleur>`** : enregistre le coffre visé (jusqu'à 10 blocs) dans la
-  liste des coffres d'une équipe (plusieurs coffres possibles). Ces coffres — ainsi que le
-  coffre ender de chaque participant — sont désormais **vidés automatiquement au début ET
-  à la fin de chaque partie**, pour éviter tout stockage d'objets d'une partie à l'autre.
-- **Pioche et hache ne sont plus données au spawn** : chaque joueur doit d'abord les acheter
-  dans l'onglet « Tools » du shop pour les avoir et les garder le reste de la partie. Les
-  paliers utilisent maintenant les mêmes noms que l'épée (Bois → Pierre → Fer → Diamant) :
-  Bois **10 fer**, Pierre **10 fer**, Fer **4 or**, Diamant **12 or**. Plus rien n'est
-  gratuit pour pioche/hache, mais une fois le palier bois acheté, il reste acquis pour
-  toujours ; la dégradation d'un cran à chaque mort ne concerne que les paliers supérieurs.
-  L'épée n'est pas concernée : son palier bois reste donné gratuitement au spawn.
-- **Spectateurs libres de se déplacer dans toute l'arène** : le confinement utilisait un
-  rayon fixe de 60 blocs depuis le point spectateur, ce qui pouvait téléporter un spectateur
-  même au milieu d'une grande map. La vraie zone de jeu (`pos1`/`pos2`, avec une bonne marge
-  tout autour) est maintenant utilisée à la place de ce simple cercle.
-- **Les minerais n'« éjectent » plus** : vitesse nulle systématique sur tous les items
-  générés (fer, or, diamant, émeraude), qui apparaissent pile à l'endroit prévu au lieu de
-  sursauter ou glisser. Le rayon de dispersion de la Forge est également resserré.
-- **Fireball ajoutée au shop par défaut** (onglet utilitaires, **40 fer**). Si votre shop
-  est déjà configuré, ajoutez-la avec `/bd shop utility <slot> FIRE_CHARGE 1 40 fer`.
+- **Morts par chute enfin fiables** : la mort instantanée lorsqu'on tombe sous la map se
+  calcule maintenant à partir des spawns et des lits des équipes (avec une grande marge
+  de 15 blocs), au lieu du rectangle brut `pos1`/`pos2`. Résultat : plus aucune mort
+  fantôme en pleine partie dès qu'un joueur descendait quelques blocs sous le niveau à
+  peine plus haut de la zone déclarée, tout en continuant à tuer immédiatement toute
+  personne qui tombe réellement hors de la map.
+- **Correctifs de compilation** : mise à jour vers l'API Paper 1.21 moderne
+  (`PlayerProfile#update()` au lieu de l'ancien `complete()`) et import corrigé de
+  `LeatherArmorMeta`. Le plugin compile à nouveau proprement avec `mvn clean package`.
 
 ## 📦 Installation
 
@@ -86,6 +69,36 @@ Permission `bedwars.admin` (op par défaut) pour tout ce qui configure/supprime 
 `bedwars.join` (tout le monde par défaut) pour rejoindre une partie.
 
 ## Historique des versions
+
+### Nouveautés (v1.0.18)
+
+- **`/bd quickmenu <épée|pioche|hache|bloc> <0-8>`** : chaque joueur personnalise lui-même
+  la position de son épée, sa pioche, sa hache (en partie) et du bloc « choisir son équipe »
+  (dans le lobby d'attente) dans sa hotbar. La préférence est individuelle et sauvegardée
+  (`playerprefs.yml`), puis appliquée automatiquement à chaque partie ou lobby suivant. La
+  protection anti-drop/déplacement suit désormais l'item lui-même plutôt qu'un numéro de
+  slot fixe : elle fonctionne donc quel que soit le slot choisi.
+- **`/bd <nom> chest <couleur>`** : enregistre le coffre visé (jusqu'à 10 blocs) dans la
+  liste des coffres d'une équipe (plusieurs coffres possibles). Ces coffres — ainsi que le
+  coffre ender de chaque participant — sont désormais **vidés automatiquement au début ET
+  à la fin de chaque partie**, pour éviter tout stockage d'objets d'une partie à l'autre.
+- **Pioche et hache ne sont plus données au spawn** : chaque joueur doit d'abord les acheter
+  dans l'onglet « Tools » du shop pour les avoir et les garder le reste de la partie. Les
+  paliers utilisent maintenant les mêmes noms que l'épée (Bois → Pierre → Fer → Diamant) :
+  Bois **10 fer**, Pierre **10 fer**, Fer **4 or**, Diamant **12 or**. Plus rien n'est
+  gratuit pour pioche/hache, mais une fois le palier bois acheté, il reste acquis pour
+  toujours ; la dégradation d'un cran à chaque mort ne concerne que les paliers supérieurs.
+  L'épée n'est pas concernée : son palier bois reste donné gratuitement au spawn.
+- **Spectateurs libres de se déplacer dans toute l'arène** : le confinement utilisait un
+  rayon fixe de 60 blocs depuis le point spectateur, ce qui pouvait téléporter un spectateur
+  même au milieu d'une grande map. La vraie zone de jeu (`pos1`/`pos2`, avec une bonne marge
+  tout autour) est maintenant utilisée à la place de ce simple cercle.
+- **Les minerais n'« éjectent » plus** : vitesse nulle systématique sur tous les items
+  générés (fer, or, diamant, émeraude), qui apparaissent pile à l'endroit prévu au lieu de
+  sursauter ou glisser. Le rayon de dispersion de la Forge est également resserré.
+- **Fireball ajoutée au shop par défaut** (onglet utilitaires, **40 fer**). Si votre shop
+  est déjà configuré, ajoutez-la avec `/bd shop utility <slot> FIRE_CHARGE 1 40 fer`.
+
 
 ### Nouveautés (v17)
 

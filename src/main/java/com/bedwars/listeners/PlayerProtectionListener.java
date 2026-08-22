@@ -86,14 +86,31 @@ public class PlayerProtectionListener implements Listener {
             return;
         }
 
-        // Joueur vivant en partie : mort instantanée dès qu'il sort de la zone de jeu par en
-        // dessous (pas besoin d'attendre qu'il tombe jusque dans le vide du monde).
-        if (game.isAlivePlaying(player) && arena.getGamePos1() != null && arena.getGamePos2() != null) {
-            double minY = Math.min(arena.getGamePos1().getY(), arena.getGamePos2().getY());
-            if (player.getLocation().getY() < minY - 1) {
+        // Joueur vivant en partie : mort instantanée s'il tombe nettement en dessous de la zone
+        // jouable (pas besoin d'attendre qu'il tombe jusque dans le vide du monde). On se base
+        // sur les spawns/lits des équipes (toujours fiables, précisément au niveau du sol jouable)
+        // plutôt que sur pos1/pos2 (qui ne délimitent pas forcément le sol au bloc près et
+        // provoquaient des morts en pleine partie dès le moindre mouvement).
+        if (game.isAlivePlaying(player)) {
+            double threshold = computeDeathThresholdY(arena);
+            if (threshold != Double.NEGATIVE_INFINITY && player.getLocation().getY() < threshold) {
                 player.setHealth(0.0);
             }
         }
+    }
+
+    /** Seuil de Y en dessous duquel un joueur meurt instantanément (grosse marge de sécurité). */
+    private double computeDeathThresholdY(Arena arena) {
+        double minY = Double.MAX_VALUE;
+        for (com.bedwars.arena.ArenaTeam team : arena.getTeams().values()) {
+            if (team.getSpawnLocation() != null) minY = Math.min(minY, team.getSpawnLocation().getY());
+            if (team.getBedLocation() != null) minY = Math.min(minY, team.getBedLocation().getY());
+        }
+        if (minY == Double.MAX_VALUE) {
+            if (arena.getGamePos1() == null || arena.getGamePos2() == null) return Double.NEGATIVE_INFINITY;
+            minY = Math.min(arena.getGamePos1().getY(), arena.getGamePos2().getY());
+        }
+        return minY - 15; // grosse marge : ne se déclenche qu'en cas de vraie chute hors de la map
     }
 
     @EventHandler
