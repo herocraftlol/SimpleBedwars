@@ -3,20 +3,42 @@
 **BedwarsPlugin** est un plugin BedWars complet pour serveurs **Paper 1.21+**, entièrement
 configurable en jeu via la commande `/bd` : création et clonage d'arènes, équipes
 personnalisables, générateurs de ressources, shop et améliorations d'équipe façon Hypixel,
-PNJ vendeurs à skin de joueur, lobby d'attente flottant, pièges, mort subite avec dragons —
-le tout **sans aucune dépendance externe**.
+PNJ vendeurs à skin de joueur, lobby d'attente flottant, pièges, boules de feu, statistiques
+et classements des joueurs, mort subite avec dragons — le tout **sans aucune dépendance
+externe**.
 
-## ✨ Nouveautés de la v1.0.19
+## ✨ Nouveautés de la v1.0.20
 
-- **Morts par chute enfin fiables** : la mort instantanée lorsqu'on tombe sous la map se
-  calcule maintenant à partir des spawns et des lits des équipes (avec une grande marge
-  de 15 blocs), au lieu du rectangle brut `pos1`/`pos2`. Résultat : plus aucune mort
-  fantôme en pleine partie dès qu'un joueur descendait quelques blocs sous le niveau à
-  peine plus haut de la zone déclarée, tout en continuant à tuer immédiatement toute
-  personne qui tombe réellement hors de la map.
-- **Correctifs de compilation** : mise à jour vers l'API Paper 1.21 moderne
-  (`PlayerProfile#update()` au lieu de l'ancien `complete()`) et import corrigé de
-  `LeatherArmorMeta`. Le plugin compile à nouveau proprement avec `mvn clean package`.
+- **📊 Statistiques persistantes** : chaque joueur accumule désormais ses résultats d'une
+  partie à l'autre (parties jouées, victoires, kills, final kills, lits détruits), sauvegardés
+  dans `stats.yml`. Consultez les vôtres avec **`/bd stats`**, ou ceux de n'importe qui avec
+  **`/bd stats <joueur>`**.
+- **🏆 Classements holographiques** : invoquez un classement flottant là où vous vous trouvez
+  avec **`/bd leaderboard <beds|wins|kills|finalkills|games>`** (et retirez-le avec
+  `/bd leaderboard <catégorie> remove`). Un hologramme par catégorie — top lits détruits,
+  victoires, kills, final kills ou parties jouées — persisté (`leaderboards.yml`) et
+  **rafraîchi automatiquement toutes les 30 secondes**, façon HikaBrain.
+- **⭐ Onglet « Quick Buy » dans le shop** : une nether star trône désormais en haut à gauche
+  du Marchand — c'est l'onglet affiché **par défaut** à l'ouverture, comme sur Hypixel.
+  **Shift-clic** sur n'importe quel article pour l'ajouter (ou le retirer) de vos favoris ;
+  ils sont sauvegardés par joueur (`favorites.yml`) et regroupés proprement dans cet onglet.
+- **🔥 Boules de feu façon Hypixel** : la fire charge achetée au shop se **lance d'un clic
+  droit** dans la direction regardée (au lieu d'allumer un feu), explose au premier obstacle
+  en ne cassant que les blocs posés par les joueurs, et **propulse en l'air** quiconque se
+  trouve près de l'impact — y compris vous-même pour des sauts boostés.
+- **🧪 Nouveaux articles au shop** : cinq potions prêtes à l'emploi (Force, Vitesse,
+  Invisibilité, Saut, Soin — 20 secondes) dans l'onglet Potions, et deux **arcs enchantés**
+  (Puissance I ; Puissance I + Recul I) dans l'onglet Ranged. Ils s'ajoutent automatiquement
+  à côté de vos articles configurés, sans jamais polluer `shop.yml`.
+- **🎒 Hotbar enfin libre** : l'épée, la pioche, la hache et le bloc « choisir son équipe »
+  sont toujours placés au slot choisi via `/bd quickmenu` au moment où ils vous sont donnés,
+  mais vous pouvez ensuite **les réorganiser librement dans votre hotbar** en pleine partie.
+  Ils restent indroppables et ne peuvent pas quitter la hotbar (impossible de les perdre) ;
+  seuls les vrais boutons du lobby (forcer le lancement, quitter) restent totalement verrouillés.
+- **🛏️ `/bd <nom> autobeds`** : détecte automatiquement tous les lits de la zone `pos1`/`pos2`
+  et les assigne aux équipes d'après leur couleur — fini la configuration lit par lit.
+- **🛒 `/bd shopmenu`** : ouvre un aperçu du shop utilisable depuis le lobby d'attente, pour
+  préparer sa stratégie (et ses favoris Quick Buy) avant même le début de la partie.
 
 ## 📦 Installation
 
@@ -46,10 +68,14 @@ et le shade-plugin). Nécessite un JDK 21+ et Maven.
 /bd spectate <nom>
 /bd leave
 /bd quickmenu <épée|pioche|hache|bloc> <0-8>        (personnalisez vos slots de hotbar)
+/bd shopmenu                                        (aperçu du shop utilisable au lobby)
+/bd stats [joueur]                                  (statistiques globales persistantes)
+/bd leaderboard <beds|wins|kills|finalkills|games> [remove]   (invoque un classement)
 /bd list
 /bd <nom> equipe <2/4/6/8> <joueurs par équipe>
 /bd <nom> pos1 | pos2 | posconfirm
 /bd <nom> bed <couleur>
+/bd <nom> autobeds                                   (détecte et assigne les lits par couleur)
 /bd <nom> spawn <couleur>
 /bd <nom> item <diamand|emeraude>                    (générateurs communs de la map)
 /bd <nom> forge <couleur>                            (crée fer+or de l'équipe, accélérés par l'amélioration Forge)
@@ -69,6 +95,18 @@ Permission `bedwars.admin` (op par défaut) pour tout ce qui configure/supprime 
 `bedwars.join` (tout le monde par défaut) pour rejoindre une partie.
 
 ## Historique des versions
+
+### Nouveautés (v1.0.19)
+
+- **Morts par chute enfin fiables** : la mort instantanée lorsqu'on tombe sous la map se
+  calcule maintenant à partir des spawns et des lits des équipes (avec une grande marge
+  de 15 blocs), au lieu du rectangle brut `pos1`/`pos2`. Résultat : plus aucune mort
+  fantôme en pleine partie dès qu'un joueur descendait quelques blocs sous le niveau à
+  peine plus haut de la zone déclarée, tout en continuant à tuer immédiatement toute
+  personne qui tombe réellement hors de la map.
+- **Correctifs de compilation** : mise à jour vers l'API Paper 1.21 moderne
+  (`PlayerProfile#update()` au lieu de l'ancien `complete()`) et import corrigé de
+  `LeatherArmorMeta`. Le plugin compile à nouveau proprement avec `mvn clean package`.
 
 ### Nouveautés (v1.0.18)
 
@@ -498,9 +536,11 @@ com.bedwars
  │                                WaitingLobbyManager = cage invisible du lobby)
  ├─ gui/                        (NPC hub + interface double-coffre "parties disponibles")
  ├─ npc/                        (PNJ Marchand/Amélioration à apparence de joueur)
- ├─ shop/                       (catégories + GUI du shop façon Hypixel)
+ ├─ shop/                       (catégories + GUI du shop façon Hypixel, articles spéciaux)
+ ├─ stats/                      (statistiques persistantes + hologrammes de classement)
  ├─ upgrade/                    (améliorations d'équipe + GUI façon Hypixel)
- ├─ listeners/                  (combat, casse de lits, protection, ramassage, shop/PNJ)
+ ├─ listeners/                  (combat, casse de lits, protection, ramassage, shop/PNJ,
+ │                                TNT et boules de feu)
  ├─ scoreboard/                 (scoreboard en jeu)
  └─ util/                       (Location <-> YAML, sauvegarde de région, lits, économie)
 ```

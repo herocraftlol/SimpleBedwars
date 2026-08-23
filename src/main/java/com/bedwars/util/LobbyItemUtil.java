@@ -100,6 +100,17 @@ public final class LobbyItemUtil {
         return isForceStart(item) || isTeamSelect(item) || isLeave(item);
     }
 
+    /**
+     * Items du lobby dont le DÉPLACEMENT reste bloqué (le diamant "forcer le lancement" et la
+     * barrière "quitter" : ce sont des boutons fonctionnels, pas des items de jeu). Le bloc
+     * "choisir son équipe" n'en fait volontairement PAS partie : comme l'épée/pioche/hache, il
+     * n'est placé au bon slot (voir quickmenu) qu'au moment où il est donné, mais peut ensuite
+     * être librement déplacé par le joueur.
+     */
+    public static boolean isProtectedFromMoving(ItemStack item) {
+        return isForceStart(item) || isLeave(item);
+    }
+
     private static boolean hasTag(ItemStack item, NamespacedKey key) {
         if (item == null || !item.hasItemMeta()) return false;
         Byte value = item.getItemMeta().getPersistentDataContainer().get(key, PersistentDataType.BYTE);

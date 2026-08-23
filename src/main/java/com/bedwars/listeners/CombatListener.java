@@ -51,6 +51,10 @@ public class CombatListener implements Listener {
         if (game == null) return;
         if (game.isSameTeam(attacker, victim)) {
             event.setCancelled(true);
+            return;
+        }
+        if (!event.isCancelled()) {
+            game.addHitGiven(attacker.getUniqueId());
         }
     }
 

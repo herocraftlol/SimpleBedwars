@@ -73,6 +73,26 @@ public enum TeamColor {
     }
 
     /**
+     * Déduit la couleur d'équipe à partir du matériau d'un bloc de lit (ex: RED_BED -> RED).
+     * Retourne null si ce n'est pas un lit ou si sa couleur ne correspond à aucune équipe connue.
+     */
+    public static TeamColor fromBedMaterial(org.bukkit.Material material) {
+        String name = material.name();
+        if (!name.endsWith("_BED")) return null;
+        String colorName = name.substring(0, name.length() - "_BED".length());
+        DyeColor dye;
+        try {
+            dye = DyeColor.valueOf(colorName);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+        for (TeamColor tc : values()) {
+            if (tc.dyeColor == dye) return tc;
+        }
+        return null;
+    }
+
+    /**
      * Recherche une couleur d'équipe par son nom affiché (insensible à la casse et aux accents).
      */
     public static TeamColor fromDisplayName(String input) {

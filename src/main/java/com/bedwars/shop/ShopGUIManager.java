@@ -39,6 +39,8 @@ public class ShopGUIManager {
 
     private static final int SIZE = 54;
     private static final int CLOSE_SLOT = 49;
+    private static final String QUICKBUY_CATEGORY = "quickbuy";
+    private static final int QUICKBUY_TAB_SLOT = 0;
     private static final int TOOLS_TAB_SLOT = 8;
     private static final int SLOT_PICKAXE = 20;
     private static final int SLOT_AXE = 24;
@@ -51,10 +53,8 @@ public class ShopGUIManager {
     }
 
     public void open(Player player, Arena arena, TeamColor team) {
-        List<String> categories = plugin.getShopConfigManager().getCategories();
-        String defaultCategory = categories.isEmpty() ? ShopConfigManager.RESERVED_TOOLS_CATEGORY : categories.get(0);
-
-        ShopHolder holder = new ShopHolder(arena.getName(), team, defaultCategory);
+        // "Quick Buy" (favoris) est l'onglet affiché par défaut à l'ouverture, comme sur Hypixel.
+        ShopHolder holder = new ShopHolder(arena.getName(), team, QUICKBUY_CATEGORY);
         Inventory inv = Bukkit.createInventory(holder, SIZE,
                 ChatColor.DARK_GREEN + "" + ChatColor.BOLD + "Marchand " + ChatColor.RESET
                         + ChatColor.GRAY + "- " + team.getColoredName());
@@ -68,9 +68,19 @@ public class ShopGUIManager {
         ItemStack filler = pane(Material.GRAY_STAINED_GLASS_PANE, " ", List.of());
         for (int i = 0; i < SIZE; i++) inv.setItem(i, filler);
 
-        // Rangée du haut : les catégories configurées (jusqu'à 8) + l'onglet spécial "Tools".
+        // Rangée du haut : Quick Buy (favoris, en haut à gauche) - catégories configurées (jusqu'à
+        // 7, slots 1-7) - Tools (slot 8, toujours en dernier).
+        boolean quickBuySelected = QUICKBUY_CATEGORY.equalsIgnoreCase(holder.getCategory());
+        ItemStack quickBuyTab = pane(Material.NETHER_STAR,
+                (quickBuySelected ? ChatColor.YELLOW + "" + ChatColor.BOLD : ChatColor.GREEN + "") + "Quick Buy",
+                quickBuySelected
+                        ? List.of(ChatColor.GRAY + "» Vos achats favoris «")
+                        : List.of(ChatColor.YELLOW + "Cliquez pour voir vos favoris !",
+                                  ChatColor.DARK_GRAY + "(Shift-clic sur un article pour l'ajouter ici)"));
+        inv.setItem(QUICKBUY_TAB_SLOT, quickBuyTab);
+
         List<String> categories = plugin.getShopConfigManager().getCategories();
-        int tabSlot = 0;
+        int tabSlot = 1;
         for (String category : categories) {
             if (tabSlot >= TOOLS_TAB_SLOT) break; // slot 8 réservé à Tools
             boolean selected = category.equalsIgnoreCase(holder.getCategory());
@@ -81,8 +91,11 @@ public class ShopGUIManager {
         inv.setItem(TOOLS_TAB_SLOT, categoryTab("Tools", toolsSelected));
 
         holder.getSlotItems().clear();
+        holder.getSlotRefs().clear();
 
-        if (ShopConfigManager.RESERVED_TOOLS_CATEGORY.equalsIgnoreCase(holder.getCategory())) {
+        if (quickBuySelected) {
+            populateQuickBuy(player, holder, inv);
+        } else if (ShopConfigManager.RESERVED_TOOLS_CATEGORY.equalsIgnoreCase(holder.getCategory())) {
             populateTools(player, holder, inv);
         } else {
             populateGenericItems(player, holder, inv);
@@ -91,16 +104,81 @@ public class ShopGUIManager {
         inv.setItem(CLOSE_SLOT, pane(Material.BARRIER, ChatColor.RED + "Fermer", List.of()));
     }
 
+    /** Onglet Quick Buy : les articles favoris du joueur (voir FavoritesManager), rangés proprement. */
+    private void populateQuickBuy(Player player, ShopHolder holder, Inventory inv) {
+        List<String> favs = plugin.getFavoritesManager().getFavorites(player.getUniqueId());
+        if (favs.isEmpty()) {
+            inv.setItem(31, pane(Material.NETHER_STAR, ChatColor.YELLOW + "" + ChatColor.BOLD + "Aucun favori pour l'instant",
+                    List.of(ChatColor.GRAY + "Allez dans une autre catégorie et faites",
+                            ChatColor.GRAY + "Shift + clic sur un article pour l'ajouter ici.")));
+            return;
+        }
+        int slot = 9;
+        for (String ref : favs) {
+            if (slot >= 45) break;
+            ShopItem item = resolveRef(ref);
+            if (item == null) continue; // référence obsolète (article supprimé depuis) : ignorée
+            inv.setItem(slot, buildItemStack(holder.getTeam(), item, true));
+            holder.getSlotItems().put(slot, item);
+            holder.getSlotRefs().put(slot, ref);
+            slot++;
+        }
+    }
+
+    /** Retrouve un ShopItem à partir de sa référence stable (voir FavoritesManager). */
+    private ShopItem resolveRef(String ref) {
+        int sep = ref.indexOf(':');
+        if (sep < 0) return null;
+        String prefix = ref.substring(0, sep);
+        String rest = ref.substring(sep + 1);
+        try {
+            if (prefix.equals("special_potions")) {
+                int idx = Integer.parseInt(rest);
+                return idx >= 0 && idx < SpecialShopItems.POTIONS.size() ? SpecialShopItems.POTIONS.get(idx) : null;
+            }
+            if (prefix.equals("special_ranged")) {
+                int idx = Integer.parseInt(rest);
+                return idx >= 0 && idx < SpecialShopItems.RANGED_EXTRA.size() ? SpecialShopItems.RANGED_EXTRA.get(idx) : null;
+            }
+            int configSlot = Integer.parseInt(rest);
+            return plugin.getShopConfigManager().getItems(prefix).get(configSlot);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     private void populateGenericItems(Player player, ShopHolder holder, Inventory inv) {
         Map<Integer, ShopItem> items = plugin.getShopConfigManager().getItems(holder.getCategory());
         int slot = 9;
-        for (ShopItem item : items.values()) {
+        for (Map.Entry<Integer, ShopItem> entry : items.entrySet()) {
             if (slot >= 45) break;
-            inv.setItem(slot, buildItemStack(holder.getTeam(), item));
-            holder.getSlotItems().put(slot, item);
+            String ref = holder.getCategory().toLowerCase() + ":" + entry.getKey();
+            boolean fav = plugin.getFavoritesManager().isFavorite(player.getUniqueId(), ref);
+            inv.setItem(slot, buildItemStack(holder.getTeam(), entry.getValue(), fav));
+            holder.getSlotItems().put(slot, entry.getValue());
+            holder.getSlotRefs().put(slot, ref);
             slot++;
         }
-        if (items.isEmpty()) {
+
+        List<ShopItem> special = switch (holder.getCategory().toLowerCase()) {
+            case "potions" -> SpecialShopItems.POTIONS;
+            case "ranged" -> SpecialShopItems.RANGED_EXTRA;
+            default -> List.of();
+        };
+        String specialPrefix = holder.getCategory().equalsIgnoreCase("potions") ? "special_potions" : "special_ranged";
+        int idx = 0;
+        for (ShopItem item : special) {
+            if (slot >= 45) break;
+            String ref = specialPrefix + ":" + idx;
+            boolean fav = plugin.getFavoritesManager().isFavorite(player.getUniqueId(), ref);
+            inv.setItem(slot, buildItemStack(holder.getTeam(), item, fav));
+            holder.getSlotItems().put(slot, item);
+            holder.getSlotRefs().put(slot, ref);
+            slot++;
+            idx++;
+        }
+
+        if (items.isEmpty() && special.isEmpty()) {
             inv.setItem(22, pane(Material.PAPER, ChatColor.GRAY + "Catégorie vide",
                     List.of(ChatColor.DARK_GRAY + "Aucun article configuré ici.",
                             ChatColor.DARK_GRAY + "/bd shop " + holder.getCategory() + " <slot> <item> <qté> <prix> <minerai>")));
@@ -209,21 +287,48 @@ public class ShopGUIManager {
     }
 
     private ItemStack buildItemStack(TeamColor team, ShopItem item) {
+        return buildItemStack(team, item, false);
+    }
+
+    private ItemStack buildItemStack(TeamColor team, ShopItem item, boolean favorite) {
+        if (item.getPotionType() != null) {
+            return buildPotionStack(item, favorite);
+        }
+
         Material material = TeamColorUtil.colorize(item.getMaterial(), team);
         ItemStack stack = new ItemStack(material, 1);
+        for (Map.Entry<org.bukkit.enchantments.Enchantment, Integer> ench : item.getEnchantments().entrySet()) {
+            stack.addUnsafeEnchantment(ench.getKey(), ench.getValue());
+        }
         ItemMeta meta = stack.getItemMeta();
-        meta.setDisplayName(ChatColor.WHITE + item.getDisplayName());
+        meta.setDisplayName((favorite ? ChatColor.YELLOW + "★ " : ChatColor.WHITE + "") + item.getDisplayName());
 
         List<String> lore = new ArrayList<>();
         lore.add(ChatColor.GOLD + "Prix: " + ChatColor.WHITE + item.getAmount() + "x pour " + item.getPrice() + " " + item.getCurrencyName());
         lore.add(ChatColor.YELLOW + "Cliquez pour acheter !");
+        lore.add(favorite ? ChatColor.GOLD + "Shift-clic pour retirer des favoris" : ChatColor.DARK_GRAY + "Shift-clic pour ajouter aux favoris");
+        meta.setLore(lore);
+        stack.setItemMeta(meta);
+        return stack;
+    }
+
+    private ItemStack buildPotionStack(ShopItem item, boolean favorite) {
+        ItemStack stack = new ItemStack(item.getMaterial(), 1);
+        org.bukkit.inventory.meta.PotionMeta meta = (org.bukkit.inventory.meta.PotionMeta) stack.getItemMeta();
+        meta.setBasePotionType(item.getPotionType());
+        meta.setDisplayName((favorite ? ChatColor.YELLOW + "★ " : ChatColor.WHITE + "") + item.getDisplayName());
+
+        List<String> lore = new ArrayList<>();
+        lore.add(ChatColor.GOLD + "Prix: " + ChatColor.WHITE + item.getPrice() + " " + item.getCurrencyName());
+        lore.add(ChatColor.YELLOW + "Cliquez pour acheter !");
+        lore.add(favorite ? ChatColor.GOLD + "Shift-clic pour retirer des favoris" : ChatColor.DARK_GRAY + "Shift-clic pour ajouter aux favoris");
         meta.setLore(lore);
         stack.setItemMeta(meta);
         return stack;
     }
 
     /** Gère un clic dans le GUI du shop. Retourne true si le clic a été traité ici. */
-    public boolean handleClick(Player player, Inventory topInventory, int slot) {
+    public boolean handleClick(Player player, Inventory topInventory, int slot, boolean isShiftClick) {
         if (!(topInventory.getHolder() instanceof ShopHolder holder)) return false;
         Arena arena = plugin.getArenaManager().getArena(holder.getArenaName());
         if (arena == null) return true;
@@ -233,6 +338,12 @@ public class ShopGUIManager {
             return true;
         }
 
+        if (slot == QUICKBUY_TAB_SLOT) {
+            holder.setCategory(QUICKBUY_CATEGORY);
+            populate(player, arena, topInventory, holder);
+            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 1f);
+            return true;
+        }
         if (slot == TOOLS_TAB_SLOT) {
             holder.setCategory(ShopConfigManager.RESERVED_TOOLS_CATEGORY);
             populate(player, arena, topInventory, holder);
@@ -240,8 +351,9 @@ public class ShopGUIManager {
             return true;
         }
         List<String> categories = plugin.getShopConfigManager().getCategories();
-        if (slot >= 0 && slot < TOOLS_TAB_SLOT && slot < categories.size()) {
-            holder.setCategory(categories.get(slot));
+        int categoryIndex = slot - 1; // slot 1 = 1ère catégorie configurée, slot 0 = Quick Buy
+        if (slot > QUICKBUY_TAB_SLOT && slot < TOOLS_TAB_SLOT && categoryIndex < categories.size()) {
+            holder.setCategory(categories.get(categoryIndex));
             populate(player, arena, topInventory, holder);
             player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 1f);
             return true;
@@ -254,6 +366,18 @@ public class ShopGUIManager {
 
         ShopItem item = holder.getSlotItems().get(slot);
         if (item == null) return true;
+
+        if (isShiftClick) {
+            String ref = holder.getSlotRefs().get(slot);
+            if (ref != null) {
+                boolean added = plugin.getFavoritesManager().toggle(player.getUniqueId(), ref);
+                player.sendMessage(ChatColor.GREEN + (added ? "Ajouté aux favoris (Quick Buy) !" : "Retiré des favoris."));
+                player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 1f, 1f);
+                populate(player, arena, topInventory, holder);
+            }
+            return true;
+        }
+
         purchase(player, holder, item, topInventory, arena);
         return true;
     }
@@ -303,11 +427,19 @@ public class ShopGUIManager {
 
         String prefKey = isPickaxe ? com.bedwars.util.PlayerPrefsManager.PICKAXE : com.bedwars.util.PlayerPrefsManager.AXE;
         int defaultSlot = isPickaxe ? com.bedwars.util.KitProtectionUtil.SLOT_PICKAXE : com.bedwars.util.KitProtectionUtil.SLOT_AXE;
-        int targetSlot = plugin.getPlayerPrefsManager().getSlot(player.getUniqueId(), prefKey, defaultSlot);
         Material newMaterial = isPickaxe ? next.getPickaxe() : next.getAxe();
         String label = isPickaxe ? "Pioche" : "Hache";
-        player.getInventory().setItem(targetSlot,
-                com.bedwars.util.KitProtectionUtil.tagAsKitTool(new ItemStack(newMaterial), label));
+        ItemStack newTool = com.bedwars.util.KitProtectionUtil.tagAsKitTool(new ItemStack(newMaterial), label);
+
+        int existingSlot = instance.findKitToolSlot(player, isPickaxe
+                ? java.util.Set.of(Material.WOODEN_PICKAXE, Material.STONE_PICKAXE, Material.IRON_PICKAXE, Material.DIAMOND_PICKAXE)
+                : java.util.Set.of(Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE, Material.DIAMOND_AXE));
+        if (existingSlot >= 0) {
+            player.getInventory().setItem(existingSlot, newTool);
+        } else {
+            int preferredSlot = plugin.getPlayerPrefsManager().getSlot(player.getUniqueId(), prefKey, defaultSlot);
+            instance.placeAtPreferredSlot(player, preferredSlot, newTool);
+        }
 
         if (isPickaxe) {
             instance.setPickaxeTier(player.getUniqueId(), next.getLevel());
@@ -332,19 +464,51 @@ public class ShopGUIManager {
         }
         EconomyUtil.removeCurrency(player, item.getCurrency(), item.getPrice());
 
-        Material material = TeamColorUtil.colorize(item.getMaterial(), holder.getTeam());
-
-        if (!equipIfArmorPiece(player, material)) {
-            ItemStack stack = new ItemStack(material, item.getAmount());
-            Map<Integer, ItemStack> leftover = player.getInventory().addItem(stack);
-            for (ItemStack extra : leftover.values()) {
-                player.getWorld().dropItem(player.getLocation(), extra);
+        if (item.getPotionType() != null) {
+            giveOrDrop(player, buildPurchasedPotion(item));
+        } else {
+            Material material = TeamColorUtil.colorize(item.getMaterial(), holder.getTeam());
+            if (!equipIfArmorPiece(player, material)) {
+                ItemStack stack = new ItemStack(material, item.getAmount());
+                for (Map.Entry<org.bukkit.enchantments.Enchantment, Integer> ench : item.getEnchantments().entrySet()) {
+                    stack.addUnsafeEnchantment(ench.getKey(), ench.getValue());
+                }
+                giveOrDrop(player, stack);
             }
         }
 
         player.sendMessage(ChatColor.GREEN + "Acheté: " + ChatColor.WHITE + item.getAmount() + "x " + item.getDisplayName());
         player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1f, 1f);
         populate(player, arena, topInventory, holder);
+    }
+
+    private void giveOrDrop(Player player, ItemStack stack) {
+        Map<Integer, ItemStack> leftover = player.getInventory().addItem(stack);
+        for (ItemStack extra : leftover.values()) {
+            player.getWorld().dropItem(player.getLocation(), extra);
+        }
+    }
+
+    /** Construit la potion jetable réellement donnée au joueur, avec la durée exacte configurée. */
+    private ItemStack buildPurchasedPotion(ShopItem item) {
+        ItemStack stack = new ItemStack(item.getMaterial(), 1);
+        org.bukkit.inventory.meta.PotionMeta meta = (org.bukkit.inventory.meta.PotionMeta) stack.getItemMeta();
+        meta.setBasePotionType(item.getPotionType());
+        meta.setDisplayName(ChatColor.WHITE + item.getDisplayName());
+
+        org.bukkit.potion.PotionEffectType effectType = switch (item.getPotionType()) {
+            case STRENGTH -> org.bukkit.potion.PotionEffectType.STRENGTH;
+            case SWIFTNESS -> org.bukkit.potion.PotionEffectType.SPEED;
+            case INVISIBILITY -> org.bukkit.potion.PotionEffectType.INVISIBILITY;
+            case LEAPING -> org.bukkit.potion.PotionEffectType.JUMP_BOOST;
+            case HEALING -> org.bukkit.potion.PotionEffectType.INSTANT_HEALTH;
+            default -> null;
+        };
+        if (effectType != null && item.getPotionDurationTicks() > 0) {
+            meta.addCustomEffect(new org.bukkit.potion.PotionEffect(effectType, item.getPotionDurationTicks(), 0), true);
+        }
+        stack.setItemMeta(meta);
+        return stack;
     }
 
     /** Équipe directement bottes/jambières/plastron/casque achetés, plutôt que de les mettre en vrac dans l'inventaire. */
@@ -383,6 +547,7 @@ public class ShopGUIManager {
         private final TeamColor team;
         private String category;
         private final Map<Integer, ShopItem> slotItems = new java.util.HashMap<>();
+        private final Map<Integer, String> slotRefs = new java.util.HashMap<>();
         private Inventory inventory;
 
         public ShopHolder(String arenaName, TeamColor team, String category) {
@@ -413,6 +578,10 @@ public class ShopGUIManager {
 
         public Map<Integer, ShopItem> getSlotItems() {
             return slotItems;
+        }
+
+        public Map<Integer, String> getSlotRefs() {
+            return slotRefs;
         }
 
         @Override

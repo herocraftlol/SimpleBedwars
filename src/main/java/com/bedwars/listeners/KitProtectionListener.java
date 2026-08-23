@@ -14,16 +14,15 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 
 /**
- * Empêche toute manipulation des items protégés d'un joueur en partie/lobby :
- *  - les 3 outils du kit de base (épée/hache/pioche — voir KitProtectionUtil) ;
- *  - les 3 items spéciaux du lobby d'attente (diamant "forcer le lancement", bloc "choisir son
- *    équipe", barrière "quitter" — voir LobbyItemUtil).
- * Impossible de les drop, déplacer, dupliquer, échanger avec la main secondaire, ou les
- * sortir de quelque façon que ce soit tant que le joueur est en jeu/en lobby.
- *
- * Volontairement basé sur le CONTENU (tag) des items plutôt que sur des numéros de slot fixes :
- * chaque joueur peut personnaliser la position de ses items via /bd quickmenu (voir
- * PlayerPrefsManager), donc la protection doit suivre l'item où qu'il se trouve.
+ * Deux niveaux de protection :
+ *  - Les VRAIS boutons fonctionnels du lobby (diamant "forcer le lancement", barrière "quitter") :
+ *    totalement verrouillés (indroppables, indéplaçables), comme avant.
+ *  - L'épée, la pioche, la hache et le bloc "choisir son équipe" : placés au bon slot de la hotbar
+ *    (celui choisi via /bd quickmenu, sinon le défaut) au moment où ils sont donnés (spawn,
+ *    réapparition, achat — voir GameInstance#placeAtPreferredSlot), mais ENSUITE librement
+ *    réorganisables PAR LE JOUEUR À L'INTÉRIEUR DE SA HOTBAR (échanger deux slots de hotbar entre
+ *    eux). Toujours indroppables et impossibles à sortir de la hotbar (vers l'inventaire principal
+ *    ou un autre GUI), pour ne jamais les perdre.
  */
 public class KitProtectionListener implements Listener {
 
@@ -37,20 +36,30 @@ public class KitProtectionListener implements Listener {
         return plugin.getGameManager().findInstanceOf(player) != null;
     }
 
-    private boolean isLocked(ItemStack item) {
-        return KitProtectionUtil.isKitTool(item) || LobbyItemUtil.isAnyLobbyItem(item);
+    /** Boutons fonctionnels : jamais déplaçables, jamais droppables. */
+    private boolean isFullyLocked(ItemStack item) {
+        return LobbyItemUtil.isProtectedFromMoving(item);
+    }
+
+    /** Épée/pioche/hache/bloc d'équipe : déplaçables, mais uniquement au sein de la hotbar. */
+    private boolean isHotbarOnly(ItemStack item) {
+        return KitProtectionUtil.isKitTool(item) || LobbyItemUtil.isTeamSelect(item);
+    }
+
+    private boolean isAnySpecial(ItemStack item) {
+        return isFullyLocked(item) || isHotbarOnly(item);
     }
 
     @EventHandler
     public void onDrop(PlayerDropItemEvent event) {
-        if (isLocked(event.getItemDrop().getItemStack())) {
+        if (isAnySpecial(event.getItemDrop().getItemStack())) {
             event.setCancelled(true);
         }
     }
 
     @EventHandler
     public void onSwapHands(PlayerSwapHandItemsEvent event) {
-        if (isLocked(event.getMainHandItem()) || isLocked(event.getOffHandItem())) {
+        if (isAnySpecial(event.getMainHandItem()) || isAnySpecial(event.getOffHandItem())) {
             event.setCancelled(true);
         }
     }
@@ -58,12 +67,12 @@ public class KitProtectionListener implements Listener {
     @EventHandler
     public void onDrag(InventoryDragEvent event) {
         if (!(event.getWhoClicked() instanceof Player player) || !inGame(player)) return;
-        if (isLocked(event.getOldCursor())) {
+        if (isAnySpecial(event.getOldCursor())) {
             event.setCancelled(true);
             return;
         }
         for (ItemStack item : event.getNewItems().values()) {
-            if (isLocked(item)) {
+            if (isAnySpecial(item)) {
                 event.setCancelled(true);
                 return;
             }
@@ -78,19 +87,38 @@ public class KitProtectionListener implements Listener {
             return; // pas l'inventaire du joueur (un shop/GUI custom est déjà géré ailleurs)
         }
 
-        // L'item cliqué ou sous le curseur est protégé : bloque tout déplacement, quel que soit
-        // le slot où il se trouve (personnalisable via /bd quickmenu).
-        if (isLocked(event.getCurrentItem()) || isLocked(event.getCursor())) {
+        ItemStack current = event.getCurrentItem();
+        ItemStack cursor = event.getCursor();
+
+        // Boutons fonctionnels : jamais touchables, quel que soit le clic.
+        if (isFullyLocked(current) || isFullyLocked(cursor)) {
             event.setCancelled(true);
             return;
         }
 
-        // Échange via une touche numérique (1-9) : vérifie le contenu réel du slot de hotbar visé,
-        // peu importe lequel (pas de liste figée, pour suivre les positions personnalisées).
+        // Épée/outils/bloc équipe : autorisé seulement si ça reste dans la hotbar (slots 0-8),
+        // pas de shift-click (qui les enverrait dans l'inventaire principal).
+        if (isHotbarOnly(current) || isHotbarOnly(cursor)) {
+            boolean clickedIsHotbar = event.getClickedInventory() instanceof PlayerInventory
+                    && event.getSlot() >= 0 && event.getSlot() <= 8;
+            if (event.getClick().isShiftClick() || !clickedIsHotbar) {
+                event.setCancelled(true);
+            }
+            return;
+        }
+
+        // Échange via une touche numérique (1-9) : le slot de hotbar visé doit lui aussi être
+        // protégé de la même façon (jamais sorti de la hotbar, jamais s'il s'agit d'un bouton).
         if (event.getHotbarButton() >= 0) {
             ItemStack hotbarItem = player.getInventory().getItem(event.getHotbarButton());
-            if (isLocked(hotbarItem)) {
+            if (isFullyLocked(hotbarItem)) {
                 event.setCancelled(true);
+            } else if (isHotbarOnly(hotbarItem)) {
+                boolean clickedIsHotbar = event.getClickedInventory() instanceof PlayerInventory
+                        && event.getSlot() >= 0 && event.getSlot() <= 8;
+                if (!clickedIsHotbar) {
+                    event.setCancelled(true);
+                }
             }
         }
     }

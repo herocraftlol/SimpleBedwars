@@ -30,6 +30,8 @@ public class GameInstance {
     private final Map<UUID, TeamColor> playerTeams = new HashMap<>();
     private final Map<UUID, Integer> kills = new HashMap<>();
     private final Map<UUID, Integer> finalKills = new HashMap<>();
+    private final Map<UUID, Integer> bedsBroken = new HashMap<>();
+    private final Map<UUID, Integer> hitsGiven = new HashMap<>();
     private final Map<Generator, List<UUID>> groundItems = new HashMap<>();
     private final Set<Location> placedBlocks = new HashSet<>();
     private final Map<TeamColor, TeamUpgrades> teamUpgrades = new EnumMap<>(TeamColor.class);
@@ -330,10 +332,10 @@ public class GameInstance {
         player.getInventory().setBoots(dyed(Material.LEATHER_BOOTS, color));
 
         // Épée : toujours donnée (palier bois par défaut). Hache/pioche : PAS données au
-        // spawn — il faut d'abord les débloquer (gratuitement, palier bois) dans le shop pour
-        // les avoir et les garder pour le reste de la partie. Verrouillés par KitProtectionListener :
-        // indroppables, indéplaçables, indupliquables. La position dans la hotbar est celle
-        // choisie par le joueur via /bd quickmenu (sinon la position par défaut).
+        // spawn — il faut d'abord les acheter (palier bois) dans le shop pour les avoir et les
+        // garder pour le reste de la partie. La position dans la hotbar est celle choisie par le
+        // joueur via /bd quickmenu (sinon la position par défaut) au moment où l'item est donné
+        // (spawn, réapparition, achat) — ensuite, le joueur reste libre de les déplacer où il veut.
         UUID uuid = player.getUniqueId();
         var prefs = plugin.getPlayerPrefsManager();
         int swordSlot = prefs.getSlot(uuid, com.bedwars.util.PlayerPrefsManager.SWORD, KitProtectionUtil.SLOT_SWORD);
@@ -341,26 +343,62 @@ public class GameInstance {
         int pickaxeSlot = prefs.getSlot(uuid, com.bedwars.util.PlayerPrefsManager.PICKAXE, KitProtectionUtil.SLOT_PICKAXE);
 
         SwordTier sTier = SwordTier.byLevel(getSwordTier(uuid));
-        player.getInventory().setItem(swordSlot,
+        placeAtPreferredSlot(player, swordSlot,
                 KitProtectionUtil.tagAsKitTool(new ItemStack(sTier.getMaterial()), "Épée"));
 
         int axeLevel = getAxeTier(uuid);
         if (axeLevel >= 0) {
-            player.getInventory().setItem(axeSlot,
+            placeAtPreferredSlot(player, axeSlot,
                     KitProtectionUtil.tagAsKitTool(new ItemStack(ToolTier.byLevel(axeLevel).getAxe()), "Hache"));
-        } else {
-            player.getInventory().setItem(axeSlot, null);
         }
 
         int pickaxeLevel = getPickaxeTier(uuid);
         if (pickaxeLevel >= 0) {
-            player.getInventory().setItem(pickaxeSlot,
+            placeAtPreferredSlot(player, pickaxeSlot,
                     KitProtectionUtil.tagAsKitTool(new ItemStack(ToolTier.byLevel(pickaxeLevel).getPickaxe()), "Pioche"));
-        } else {
-            player.getInventory().setItem(pickaxeSlot, null);
         }
 
         applySharpnessToSword(player);
+    }
+
+    private static final java.util.Set<Material> SWORD_MATERIALS = java.util.Set.of(
+            Material.WOODEN_SWORD, Material.STONE_SWORD, Material.IRON_SWORD, Material.DIAMOND_SWORD);
+    private static final java.util.Set<Material> PICKAXE_MATERIALS = java.util.Set.of(
+            Material.WOODEN_PICKAXE, Material.STONE_PICKAXE, Material.IRON_PICKAXE, Material.DIAMOND_PICKAXE);
+    private static final java.util.Set<Material> AXE_MATERIALS = java.util.Set.of(
+            Material.WOODEN_AXE, Material.STONE_AXE, Material.IRON_AXE, Material.DIAMOND_AXE);
+
+    /**
+     * Retrouve dans quel slot de la hotbar se trouve actuellement un outil du kit correspondant
+     * à l'un des matériaux donnés (le joueur ayant pu le déplacer librement dans sa hotbar depuis
+     * qu'il l'a reçu). -1 si non trouvé.
+     */
+    public int findKitToolSlot(Player player, java.util.Set<Material> materials) {
+        for (int i = 0; i < 9; i++) {
+            ItemStack item = player.getInventory().getItem(i);
+            if (item != null && KitProtectionUtil.isKitTool(item) && materials.contains(item.getType())) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Place un item au slot préféré du joueur (quickmenu) SI ce slot est libre ; sinon (déjà
+     * occupé par autre chose) le donne normalement, au premier emplacement libre de l'inventaire.
+     * Utilisé pour l'épée/pioche/hache/bloc d'équipe, qui restent ensuite librement déplaçables
+     * (dans la hotbar) par le joueur.
+     */
+    public void placeAtPreferredSlot(Player player, int preferredSlot, ItemStack stack) {
+        ItemStack existing = player.getInventory().getItem(preferredSlot);
+        if (existing == null || existing.getType() == Material.AIR) {
+            player.getInventory().setItem(preferredSlot, stack);
+            return;
+        }
+        Map<Integer, ItemStack> leftover = player.getInventory().addItem(stack);
+        for (ItemStack extra : leftover.values()) {
+            player.getWorld().dropItem(player.getLocation(), extra);
+        }
     }
 
     public int getSwordTier(UUID uuid) {
@@ -410,11 +448,16 @@ public class GameInstance {
      * verrouillage (tag) ni l'enchantement Sharpness en cours (voir applySharpnessToSword).
      */
     public void refreshSwordItem(Player player) {
-        int swordSlot = plugin.getPlayerPrefsManager().getSlot(player.getUniqueId(),
-                com.bedwars.util.PlayerPrefsManager.SWORD, KitProtectionUtil.SLOT_SWORD);
-        SwordTier tier = SwordTier.byLevel(getSwordTier(player.getUniqueId()));
-        player.getInventory().setItem(swordSlot,
-                KitProtectionUtil.tagAsKitTool(new ItemStack(tier.getMaterial()), "Épée"));
+        ItemStack newSword = KitProtectionUtil.tagAsKitTool(
+                new ItemStack(SwordTier.byLevel(getSwordTier(player.getUniqueId())).getMaterial()), "Épée");
+        int currentSlot = findKitToolSlot(player, SWORD_MATERIALS);
+        if (currentSlot >= 0) {
+            player.getInventory().setItem(currentSlot, newSword);
+        } else {
+            int preferred = plugin.getPlayerPrefsManager().getSlot(player.getUniqueId(),
+                    com.bedwars.util.PlayerPrefsManager.SWORD, KitProtectionUtil.SLOT_SWORD);
+            placeAtPreferredSlot(player, preferred, newSword);
+        }
         applySharpnessToSword(player);
     }
 
@@ -429,8 +472,8 @@ public class GameInstance {
         if (color != null && teamUpgrades.containsKey(color)) {
             level = teamUpgrades.get(color).getSharpenedBlades();
         }
-        int swordSlot = plugin.getPlayerPrefsManager().getSlot(player.getUniqueId(),
-                com.bedwars.util.PlayerPrefsManager.SWORD, KitProtectionUtil.SLOT_SWORD);
+        int swordSlot = findKitToolSlot(player, SWORD_MATERIALS);
+        if (swordSlot < 0) return;
         ItemStack sword = player.getInventory().getItem(swordSlot);
         if (sword == null || !KitProtectionUtil.isKitTool(sword)) return;
         if (level > 0) {
@@ -709,14 +752,16 @@ public class GameInstance {
         }, 20L, 20L); // vérifié toutes les secondes
     }
 
+    /** Diamant : 1 toutes les 60s au palier où il se débloque (3), puis 1 toutes les 30s au dernier palier (4). */
     private long forgeDiamondIntervalSeconds(int forgeLevel) {
-        if (forgeLevel >= 4) return 15;
+        if (forgeLevel >= 4) return 30;
         if (forgeLevel == 3) return 60;
         return 0;
     }
 
+    /** Émeraude : 1 toutes les 60s, uniquement au tout dernier palier de Forge (4). */
     private long forgeEmeraldIntervalSeconds(int forgeLevel) {
-        return forgeLevel >= 4 ? 120 : 0;
+        return forgeLevel >= 4 ? 60 : 0;
     }
 
     /** Les items de la forge apparaissent dispersés dans un LÉGER rayon autour de l'ancre, sans être éjectés. */
@@ -804,10 +849,10 @@ public class GameInstance {
 
     /** Plafond au sol du fer/or d'une forge selon son palier ; -1 = illimité (dernier palier). */
     private int forgeGroundCap(GeneratorType type, int forgeLevel) {
-        if (forgeLevel >= TeamUpgrades.MAX_LEVEL_FORGE) return -1;
-        int base = type == GeneratorType.FER ? 24 : 12;
-        int perLevel = type == GeneratorType.FER ? 8 : 4;
-        return base + perLevel * forgeLevel;
+        int[] ironCaps = {24, 32, 48, 64, -1};   // palier 0 (défaut) à 4
+        int[] goldCaps = {12, 24, 32, 48, -1};   // palier 0 (défaut) à 4
+        int level = Math.max(0, Math.min(forgeLevel, 4));
+        return type == GeneratorType.FER ? ironCaps[level] : goldCaps[level];
     }
 
     /** Diamant/Émeraude : toujours au sol, jamais partagé automatiquement, avec un plafond au sol. */
@@ -1029,6 +1074,9 @@ public class GameInstance {
         ArenaTeam team = arena.getTeams().get(color);
         if (team == null || team.isBedDestroyed()) return;
         team.setBedDestroyed(true);
+        if (breaker != null) {
+            addBedBroken(breaker.getUniqueId());
+        }
 
         String breakerName = breaker != null ? breaker.getName() : "quelqu'un";
         broadcastToArena(ChatColor.RED + "" + ChatColor.BOLD + "LIT DÉTRUIT ! " + ChatColor.RESET
@@ -1143,8 +1191,56 @@ public class GameInstance {
             broadcastToArena(ChatColor.GRAY + "Partie terminée, aucune équipe survivante.");
         }
 
+        broadcastEndGameStats();
+        recordPersistentStats(winner);
+
         int delay = plugin.getConfig().getInt("game.end-reset-delay-seconds", 10);
         Bukkit.getScheduler().runTaskLater(plugin, this::resetArena, delay * 20L);
+    }
+
+    /** Affiche le top kills / lits détruits / coups donnés / final kills à tous les participants. */
+    private void broadcastEndGameStats() {
+        Set<UUID> participants = getStatsParticipantIds();
+        if (participants.isEmpty()) return;
+
+        for (Player p : getAllParticipants()) {
+            p.sendMessage("");
+            p.sendMessage(ChatColor.GOLD + "" + ChatColor.BOLD + "▬▬▬▬▬▬▬ Statistiques de la partie ▬▬▬▬▬▬▬");
+            sendTopLine(p, "Kills", participants, this::getKills);
+            sendTopLine(p, "Lits détruits", participants, this::getBedsBroken);
+            sendTopLine(p, "Coups donnés", participants, this::getHitsGiven);
+            sendTopLine(p, "Final kills", participants, this::getFinalKills);
+            p.sendMessage(ChatColor.GOLD + "▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬");
+            p.sendMessage("");
+        }
+    }
+
+    private void sendTopLine(Player viewer, String label, Set<UUID> participants, java.util.function.Function<UUID, Integer> statGetter) {
+        UUID topUuid = null;
+        int topValue = 0;
+        for (UUID uuid : participants) {
+            int value = statGetter.apply(uuid);
+            if (value > topValue) {
+                topValue = value;
+                topUuid = uuid;
+            }
+        }
+        if (topUuid == null || topValue <= 0) {
+            viewer.sendMessage(ChatColor.GRAY + "  " + label + ": " + ChatColor.DARK_GRAY + "aucun");
+            return;
+        }
+        String name = Bukkit.getOfflinePlayer(topUuid).getName();
+        if (name == null) name = "???";
+        viewer.sendMessage(ChatColor.GRAY + "  " + label + ": " + ChatColor.YELLOW + name + ChatColor.GRAY + " (" + topValue + ")");
+    }
+
+    /** Enregistre les stats de chaque participant dans le classement global persistant (voir StatsManager). */
+    private void recordPersistentStats(TeamColor winner) {
+        for (UUID uuid : getStatsParticipantIds()) {
+            TeamColor color = playerTeams.get(uuid);
+            boolean won = winner != null && winner == color;
+            plugin.getStatsManager().recordGame(uuid, won, getKills(uuid), getFinalKills(uuid), getBedsBroken(uuid));
+        }
     }
 
     private void launchFireworks(TeamColor winner) {
@@ -1179,6 +1275,8 @@ public class GameInstance {
         playerTeams.clear();
         kills.clear();
         finalKills.clear();
+        bedsBroken.clear();
+        hitsGiven.clear();
         groundItems.clear();
         pickaxeTier.clear();
         axeTier.clear();
@@ -1234,6 +1332,32 @@ public class GameInstance {
 
     public void addFinalKill(UUID uuid) {
         finalKills.merge(uuid, 1, Integer::sum);
+    }
+
+    public int getBedsBroken(UUID uuid) {
+        return bedsBroken.getOrDefault(uuid, 0);
+    }
+
+    public void addBedBroken(UUID uuid) {
+        bedsBroken.merge(uuid, 1, Integer::sum);
+    }
+
+    public int getHitsGiven(UUID uuid) {
+        return hitsGiven.getOrDefault(uuid, 0);
+    }
+
+    public void addHitGiven(UUID uuid) {
+        hitsGiven.merge(uuid, 1, Integer::sum);
+    }
+
+    /** Tous les UUID ayant participé à cette partie (pour calculer les classements de fin de partie). */
+    public Set<UUID> getStatsParticipantIds() {
+        Set<UUID> all = new HashSet<>(playerTeams.keySet());
+        all.addAll(kills.keySet());
+        all.addAll(finalKills.keySet());
+        all.addAll(bedsBroken.keySet());
+        all.addAll(hitsGiven.keySet());
+        return all;
     }
 
     public List<Player> getAllParticipants() {

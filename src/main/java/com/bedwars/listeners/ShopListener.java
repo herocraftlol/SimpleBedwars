@@ -65,7 +65,7 @@ public class ShopListener implements Listener {
         int slot = event.getRawSlot();
 
         if (isShop) {
-            plugin.getShopGUIManager().handleClick(player, topInventory, slot);
+            plugin.getShopGUIManager().handleClick(player, topInventory, slot, event.getClick().isShiftClick());
             return;
         }
 

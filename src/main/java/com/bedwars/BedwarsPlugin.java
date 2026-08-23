@@ -36,6 +36,9 @@ public class BedwarsPlugin extends JavaPlugin {
     private ShopConfigManager shopConfigManager;
     private UpgradeGUIManager upgradeGUIManager;
     private com.bedwars.util.PlayerPrefsManager playerPrefsManager;
+    private com.bedwars.stats.StatsManager statsManager;
+    private com.bedwars.stats.LeaderboardManager leaderboardManager;
+    private com.bedwars.util.FavoritesManager favoritesManager;
 
     @Override
     public void onEnable() {
@@ -56,6 +59,9 @@ public class BedwarsPlugin extends JavaPlugin {
         this.shopGUIManager = new ShopGUIManager(this);
         this.upgradeGUIManager = new UpgradeGUIManager(this);
         this.playerPrefsManager = new com.bedwars.util.PlayerPrefsManager(this);
+        this.statsManager = new com.bedwars.stats.StatsManager(this);
+        this.leaderboardManager = new com.bedwars.stats.LeaderboardManager(this);
+        this.favoritesManager = new com.bedwars.util.FavoritesManager(this);
 
         arenaManager.loadAll();
         // Nettoyage définitif de l'ancien PNJ hub (fonctionnalité remplacée par /bd arene gui) :
@@ -64,6 +70,9 @@ public class BedwarsPlugin extends JavaPlugin {
         shopConfigManager.load();
         shopNpcManager.spawnAll();
         playerPrefsManager.load();
+        statsManager.load();
+        leaderboardManager.load();
+        favoritesManager.load();
 
         BedwarsCommand command = new BedwarsCommand(this);
         getCommand("bd").setExecutor(command);
@@ -77,6 +86,7 @@ public class BedwarsPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new KitProtectionListener(this), this);
         getServer().getPluginManager().registerEvents(new LobbyItemListener(this), this);
         getServer().getPluginManager().registerEvents(new com.bedwars.listeners.TntListener(this), this);
+        getServer().getPluginManager().registerEvents(new com.bedwars.listeners.FireballListener(this), this);
 
         getLogger().info("BedwarsPlugin activé — " + arenaManager.getArenas().size() + " arène(s) chargée(s).");
     }
@@ -140,5 +150,17 @@ public class BedwarsPlugin extends JavaPlugin {
 
     public com.bedwars.util.PlayerPrefsManager getPlayerPrefsManager() {
         return playerPrefsManager;
+    }
+
+    public com.bedwars.stats.StatsManager getStatsManager() {
+        return statsManager;
+    }
+
+    public com.bedwars.stats.LeaderboardManager getLeaderboardManager() {
+        return leaderboardManager;
+    }
+
+    public com.bedwars.util.FavoritesManager getFavoritesManager() {
+        return favoritesManager;
     }
 }

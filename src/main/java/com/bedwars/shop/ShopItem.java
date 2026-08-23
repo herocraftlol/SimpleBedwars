@@ -1,14 +1,21 @@
 package com.bedwars.shop;
 
 import org.bukkit.Material;
+import org.bukkit.enchantments.Enchantment;
+import org.bukkit.potion.PotionType;
+
+import java.util.Map;
 
 /**
- * Un article générique du shop, entièrement défini en jeu via :
- * /bd shop <catégorie> <slot> <item> <quantité> <prix> <minerai>
+ * Un article du shop. La forme la plus courante (utilisée par /bd shop <catégorie> <slot> <item>
+ * <quantité> <prix> <minerai>) est volontairement simple : "achète N x item pour un prix".
  *
- * Volontairement simple (juste "achète N x item pour un prix") : la seule exception
- * est l'onglet spécial "Tools" (pioche/hache à paliers, voir {@link ToolTier}), qui
- * reste géré à part car son comportement (dégradation à la mort) est spécifique.
+ * Deux formes spéciales existent en plus (utilisées uniquement par les articles pré-configurés
+ * de l'onglet Potions/Ranged, voir ShopConfigManager#seedDefaults) :
+ *  - {@link #potion} : une potion (jetable) d'un type/durée précis, avec la bonne couleur de base.
+ *  - {@link #enchantedItem} : un item avec des enchantements fixes (arcs Puissance/Recul...).
+ *
+ * L'onglet spécial "Tools" (pioche/hache à paliers) reste géré entièrement à part (voir ToolTier).
  */
 public class ShopItem {
 
@@ -16,12 +23,36 @@ public class ShopItem {
     private final int amount;
     private final Material currency;
     private final int price;
+    private final String displayNameOverride;
+    private final PotionType potionType;
+    private final int potionDurationTicks;
+    private final Map<Enchantment, Integer> enchantments;
 
     public ShopItem(Material material, int amount, Material currency, int price) {
+        this(material, amount, currency, price, null, null, 0, Map.of());
+    }
+
+    private ShopItem(Material material, int amount, Material currency, int price, String displayNameOverride,
+                      PotionType potionType, int potionDurationTicks, Map<Enchantment, Integer> enchantments) {
         this.material = material;
         this.amount = amount;
         this.currency = currency;
         this.price = price;
+        this.displayNameOverride = displayNameOverride;
+        this.potionType = potionType;
+        this.potionDurationTicks = potionDurationTicks;
+        this.enchantments = enchantments;
+    }
+
+    /** Potion jetable (SPLASH_POTION) d'un type et d'une durée précis, avec la couleur vanilla correspondante. */
+    public static ShopItem potion(String displayName, PotionType type, int durationSeconds, Material currency, int price) {
+        return new ShopItem(Material.SPLASH_POTION, 1, currency, price, displayName, type, durationSeconds * 20, Map.of());
+    }
+
+    /** Item avec des enchantements fixes (ex: arc Puissance I). */
+    public static ShopItem enchantedItem(Material material, String displayName, Material currency, int price,
+                                          Map<Enchantment, Integer> enchantments) {
+        return new ShopItem(material, 1, currency, price, displayName, null, 0, enchantments);
     }
 
     public Material getMaterial() {
@@ -40,8 +71,21 @@ public class ShopItem {
         return price;
     }
 
-    /** Nom d'affichage généré automatiquement à partir du nom du matériau (ex: WHITE_WOOL -> "White Wool"). */
+    public PotionType getPotionType() {
+        return potionType;
+    }
+
+    public int getPotionDurationTicks() {
+        return potionDurationTicks;
+    }
+
+    public Map<Enchantment, Integer> getEnchantments() {
+        return enchantments;
+    }
+
+    /** Nom d'affichage : celui fourni explicitement, sinon généré à partir du nom du matériau (WHITE_WOOL -> "White Wool"). */
     public String getDisplayName() {
+        if (displayNameOverride != null) return displayNameOverride;
         String[] parts = material.name().split("_");
         StringBuilder sb = new StringBuilder();
         for (String part : parts) {

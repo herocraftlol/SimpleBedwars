@@ -65,6 +65,15 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         if (sub.equals("quickmenu")) {
             return handleQuickMenu(sender, args);
         }
+        if (sub.equals("stats")) {
+            return handleStats(sender, args);
+        }
+        if (sub.equals("leaderboard")) {
+            return handleLeaderboard(sender, args);
+        }
+        if (sub.equals("shopmenu")) {
+            return handleShopMenu(sender);
+        }
         if (sub.equals("list")) {
             return handleList(sender);
         }
@@ -117,6 +126,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
             case "chest" -> handleChest(player, arena, args);
             case "geninfo" -> handleGenInfo(player, arena);
             case "reset" -> handleReset(player, arena);
+            case "autobeds" -> handleAutoBeds(player, arena);
             case "shop" -> handleShop(player, arena, args);
             case "spec" -> {
                 arena.setSpecLocation(player.getLocation());
@@ -525,6 +535,109 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         };
     }
 
+    /** /bd stats [joueur] : affiche les statistiques globales et persistantes d'un joueur (soi-même par défaut). */
+    private boolean handleStats(CommandSender sender, String[] args) {
+        org.bukkit.OfflinePlayer target;
+        if (args.length >= 2) {
+            target = org.bukkit.Bukkit.getOfflinePlayer(args[1]);
+        } else if (sender instanceof Player player) {
+            target = player;
+        } else {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Précisez un joueur: /bd stats <joueur>");
+            return true;
+        }
+
+        var stats = plugin.getStatsManager().getStats(target.getUniqueId());
+        String name = target.getName() != null ? target.getName() : args.length >= 2 ? args[1] : "?";
+        sender.sendMessage(PREFIX + ChatColor.YELLOW + "" + ChatColor.BOLD + "Statistiques de " + name);
+        sender.sendMessage(ChatColor.GRAY + "Parties jouées: " + ChatColor.WHITE + stats.gamesPlayed());
+        sender.sendMessage(ChatColor.GRAY + "Victoires: " + ChatColor.WHITE + stats.wins());
+        sender.sendMessage(ChatColor.GRAY + "Kills: " + ChatColor.WHITE + stats.kills());
+        sender.sendMessage(ChatColor.GRAY + "Final kills: " + ChatColor.WHITE + stats.finalKills());
+        sender.sendMessage(ChatColor.GRAY + "Lits détruits: " + ChatColor.WHITE + stats.bedsBroken());
+        return true;
+    }
+
+    private static final java.util.Map<String, com.bedwars.stats.StatsManager.Stat> LEADERBOARD_ALIASES = java.util.Map.of(
+            "beds", com.bedwars.stats.StatsManager.Stat.BEDS_BROKEN,
+            "litsdetruits", com.bedwars.stats.StatsManager.Stat.BEDS_BROKEN,
+            "wins", com.bedwars.stats.StatsManager.Stat.WINS,
+            "victoires", com.bedwars.stats.StatsManager.Stat.WINS,
+            "kills", com.bedwars.stats.StatsManager.Stat.KILLS,
+            "finalkills", com.bedwars.stats.StatsManager.Stat.FINAL_KILLS,
+            "games", com.bedwars.stats.StatsManager.Stat.GAMES_PLAYED,
+            "parties", com.bedwars.stats.StatsManager.Stat.GAMES_PLAYED
+    );
+
+    /**
+     * /bd leaderboard <beds|wins|kills|finalkills|games> [remove] : invoque (ou retire) un
+     * hologramme de classement à l'endroit où l'on se trouve.
+     */
+    private boolean handleLeaderboard(CommandSender sender, String[] args) {
+        if (!sender.hasPermission("bedwars.admin")) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Vous n'avez pas la permission.");
+            return true;
+        }
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Cette action doit être exécutée en jeu.");
+            return true;
+        }
+        if (args.length < 2) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Utilisation: /bd leaderboard <beds|wins|kills|finalkills|games> [remove]");
+            return true;
+        }
+        var stat = LEADERBOARD_ALIASES.get(args[1].toLowerCase());
+        if (stat == null) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Type inconnu. Utilisez: beds, wins, kills, finalkills, games.");
+            return true;
+        }
+
+        if (args.length >= 3 && args[2].equalsIgnoreCase("remove")) {
+            boolean removed = plugin.getLeaderboardManager().remove(stat);
+            player.sendMessage(PREFIX + (removed
+                    ? ChatColor.GREEN + "Leaderboard " + com.bedwars.stats.StatsManager.labelFor(stat) + " retiré."
+                    : ChatColor.RED + "Aucun leaderboard " + com.bedwars.stats.StatsManager.labelFor(stat) + " n'était affiché."));
+            return true;
+        }
+
+        plugin.getLeaderboardManager().summon(stat, player.getLocation());
+        player.sendMessage(PREFIX + ChatColor.GREEN + "Leaderboard " + com.bedwars.stats.StatsManager.labelFor(stat)
+                + " invoqué ici (mis à jour automatiquement).");
+        return true;
+    }
+
+    /**
+     * /bd shopmenu : ouvre un aperçu simulé du shop, utilisable n'importe où (y compris au
+     * lobby, avant même de rejoindre une arène) — surtout utile pour gérer ses favoris Quick Buy
+     * à l'avance. Si le joueur est en pleine partie, ouvre son vrai shop d'équipe normalement.
+     */
+    private boolean handleShopMenu(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(PREFIX + ChatColor.RED + "Cette action doit être exécutée en jeu.");
+            return true;
+        }
+
+        var instance = plugin.getGameManager().findInstanceOf(player);
+        Arena arena;
+        TeamColor team;
+        if (instance != null && instance.isAlivePlaying(player)) {
+            arena = instance.getArena();
+            team = instance.getTeamColor(player);
+        } else {
+            arena = plugin.getArenaManager().getArenas().values().stream()
+                    .filter(Arena::isSaved).findFirst().orElse(null);
+            if (arena == null) {
+                player.sendMessage(PREFIX + ChatColor.RED + "Aucune arène configurée pour prévisualiser le shop.");
+                return true;
+            }
+            team = TeamColor.RED;
+            player.sendMessage(PREFIX + ChatColor.GRAY + "Aperçu du shop (mode lobby) : gérez vos favoris Quick Buy à l'avance.");
+        }
+
+        plugin.getShopGUIManager().open(player, arena, team);
+        return true;
+    }
+
     private boolean handleList(CommandSender sender) {
         List<Arena> arenas = new ArrayList<>(plugin.getArenaManager().getArenas().values());
         if (arenas.isEmpty()) {
@@ -715,20 +828,102 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
     }
 
     /**
-     * /bd <nom> reset : réinitialise immédiatement l'arène quel que soit son état (lobby
-     * d'attente, compte à rebours, partie en cours...) — tous les joueurs/spectateurs sont
-     * renvoyés au spawn du monde, la map est entièrement restaurée, et l'arène redevient
-     * disponible pour une nouvelle partie.
+     * /bd <nom> reset : réinitialise immédiatement une arène, MÊME si elle est "coincée" dans un
+     * état incohérent sans instance de partie active (ex: après un plantage, un état bloqué...).
+     * Renvoie tous les joueurs/spectateurs, restaure la map, et remet l'arène disponible.
      */
     private void handleReset(Player player, Arena arena) {
         var instance = plugin.getGameManager().getExistingInstance(arena);
-        if (instance == null) {
-            player.sendMessage(PREFIX + ChatColor.YELLOW + "Aucune partie/lobby en cours sur " + arena.getName() + ", rien à réinitialiser.");
-            return;
+        if (instance != null) {
+            instance.forceReset();
+        } else {
+            // Pas d'instance de partie suivie (ex: après un redémarrage, ou une arène restée
+            // "coincée") : on force quand même un nettoyage complet, sans dépendre d'une instance.
+            for (java.util.UUID uuid : new java.util.ArrayList<>(arena.getWaitingPlayers())) {
+                Player p = org.bukkit.Bukkit.getPlayer(uuid);
+                if (p != null) {
+                    p.setGameMode(org.bukkit.GameMode.SURVIVAL);
+                    p.getInventory().clear();
+                    plugin.getGameManager().returnPlayer(p);
+                }
+            }
+            for (java.util.UUID uuid : new java.util.ArrayList<>(arena.getSpectators())) {
+                Player p = org.bukkit.Bukkit.getPlayer(uuid);
+                if (p != null) {
+                    p.setGameMode(org.bukkit.GameMode.SURVIVAL);
+                    plugin.getGameManager().returnPlayer(p);
+                }
+            }
+            plugin.getWaitingLobbyManager().destroy(arena);
+            plugin.getArenaManager().restoreRegion(arena);
+            arena.resetRuntime();
+            if (!arena.isSaved()) {
+                arena.setState(ArenaState.SETUP);
+            }
+            plugin.getGameManager().removeInstance(arena);
         }
-        instance.forceReset();
         player.sendMessage(PREFIX + ChatColor.GREEN + "Arène " + ChatColor.YELLOW + arena.getName()
                 + ChatColor.GREEN + " réinitialisée : tous les joueurs ont été renvoyés, la map a été restaurée.");
+    }
+
+    /**
+     * /bd <nom> autobeds : scanne toute la zone de jeu (pos1/pos2) et assigne automatiquement
+     * chaque lit trouvé à l'équipe de la même couleur (un lit rouge -> lit de l'équipe rouge,
+     * un lit bleu -> lit de l'équipe bleue, etc). Nécessite que la zone de jeu soit définie.
+     */
+    private void handleAutoBeds(Player player, Arena arena) {
+        Location pos1 = arena.getGamePos1();
+        Location pos2 = arena.getGamePos2();
+        if (pos1 == null || pos2 == null) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Définissez d'abord la zone de jeu avant : /bd "
+                    + arena.getName() + " pos1 / pos2 / posconfirm.");
+            return;
+        }
+
+        int minX = Math.min(pos1.getBlockX(), pos2.getBlockX());
+        int maxX = Math.max(pos1.getBlockX(), pos2.getBlockX());
+        int minY = Math.min(pos1.getBlockY(), pos2.getBlockY());
+        int maxY = Math.max(pos1.getBlockY(), pos2.getBlockY());
+        int minZ = Math.min(pos1.getBlockZ(), pos2.getBlockZ());
+        int maxZ = Math.max(pos1.getBlockZ(), pos2.getBlockZ());
+
+        long volume = (long) (maxX - minX + 1) * (maxY - minY + 1) * (maxZ - minZ + 1);
+        if (volume > 4_000_000L) {
+            player.sendMessage(PREFIX + ChatColor.RED + "La zone de jeu est trop grande pour un scan automatique ("
+                    + volume + " blocs). Utilisez /bd " + arena.getName() + " bed <couleur> manuellement.");
+            return;
+        }
+
+        org.bukkit.World world = pos1.getWorld();
+        java.util.Set<TeamColor> found = java.util.EnumSet.noneOf(TeamColor.class);
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    org.bukkit.block.Block block = world.getBlockAt(x, y, z);
+                    if (!com.bedwars.util.BedUtil.isBedBlock(block.getType())) continue;
+                    TeamColor color = TeamColor.fromBedMaterial(block.getType());
+                    if (color == null || found.contains(color)) continue;
+
+                    found.add(color);
+                    ArenaTeam team = arena.getOrCreateTeam(color);
+                    team.setBedLocation(block.getLocation());
+                }
+            }
+        }
+
+        if (found.isEmpty()) {
+            player.sendMessage(PREFIX + ChatColor.RED + "Aucun lit détecté dans la zone de jeu.");
+            return;
+        }
+
+        StringBuilder list = new StringBuilder();
+        for (TeamColor color : found) {
+            if (list.length() > 0) list.append(ChatColor.GRAY).append(", ");
+            list.append(color.getColoredName());
+        }
+        player.sendMessage(PREFIX + ChatColor.GREEN + found.size() + " lit(s) détecté(s) et assigné(s) automatiquement : " + list);
+        player.sendMessage(ChatColor.GRAY + "Pensez à vérifier /bd " + arena.getName() + " equipe <nb> <joueurs> si ce n'est pas déjà fait.");
     }
 
     private void handleShop(Player player, Arena arena, String[] args) {
@@ -832,6 +1027,9 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "/bd arene clean" + ChatColor.DARK_GRAY + " (purge les PNJ marchand/amélioration fantômes)");
         sender.sendMessage(ChatColor.GRAY + "/bd join <nom>  |  /bd spectate <nom>  |  /bd leave  |  /bd list");
         sender.sendMessage(ChatColor.GRAY + "/bd quickmenu <épée|pioche|hache|bloc> <0-8>" + ChatColor.DARK_GRAY + " (personnalisez vos slots)");
+        sender.sendMessage(ChatColor.GRAY + "/bd shopmenu" + ChatColor.DARK_GRAY + " (aperçu du shop, utilisable au lobby, pour gérer vos favoris)");
+        sender.sendMessage(ChatColor.GRAY + "/bd stats [joueur]" + ChatColor.DARK_GRAY + " (statistiques globales persistantes)");
+        sender.sendMessage(ChatColor.GRAY + "/bd leaderboard <beds|wins|kills|finalkills|games> [remove]" + ChatColor.DARK_GRAY + " (invoque un classement)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> equipe <2/4/6/8> <joueurs>");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> pos1 | pos2 | posconfirm");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> bed <couleur>");
@@ -841,6 +1039,7 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> chest <couleur>" + ChatColor.DARK_GRAY + " (ajoute le coffre visé à l'équipe, vidé à chaque partie)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> geninfo" + ChatColor.DARK_GRAY + " (liste tous les générateurs pour diagnostiquer)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> reset" + ChatColor.DARK_GRAY + " (réinitialise immédiatement une arène, même en pleine partie)");
+        sender.sendMessage(ChatColor.GRAY + "/bd <nom> autobeds" + ChatColor.DARK_GRAY + " (détecte et assigne automatiquement les lits par couleur)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> shop <shop|upgrade> color <couleur> [pseudo]");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> spec " + ChatColor.DARK_GRAY + "(= centre du lobby d'attente flottant)");
         sender.sendMessage(ChatColor.GRAY + "/bd <nom> specspawn" + ChatColor.DARK_GRAY + " (spawn spectateurs pendant la partie, ex: milieu de la map)");
@@ -852,10 +1051,12 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         List<String> options = new ArrayList<>();
         if (args.length == 1) {
-            options.addAll(List.of("create", "delete", "copy", "shop", "arene", "join", "spectate", "leave", "quickmenu", "list"));
+            options.addAll(List.of("create", "delete", "copy", "shop", "shopmenu", "arene", "join", "spectate", "leave", "quickmenu", "stats", "leaderboard", "list"));
             options.addAll(plugin.getArenaManager().getArenas().keySet());
         } else if (args.length == 2) {
-            if (args[0].equalsIgnoreCase("arene")) {
+            if (args[0].equalsIgnoreCase("leaderboard")) {
+                options.addAll(List.of("beds", "wins", "kills", "finalkills", "games"));
+            } else if (args[0].equalsIgnoreCase("arene")) {
                 options.addAll(List.of("gui", "clean"));
             } else if (args[0].equalsIgnoreCase("quickmenu")) {
                 options.addAll(List.of("epee", "pioche", "hache", "bloc"));
@@ -867,12 +1068,14 @@ public class BedwarsCommand implements CommandExecutor, TabCompleter {
                 options.addAll(List.of("blocks", "melee", "armor", "ranged", "potions", "utility"));
             } else if (plugin.getArenaManager().getArena(args[0]) != null) {
                 options.addAll(List.of("equipe", "pos1", "pos2", "posconfirm", "bed", "spawn",
-                        "item", "forge", "chest", "geninfo", "reset", "shop", "spec", "specspawn", "minplayers", "save", "edit", "config"));
+                        "item", "forge", "chest", "geninfo", "reset", "autobeds", "shop", "spec", "specspawn", "minplayers", "save", "edit", "config"));
             }
         } else if (args.length == 7 && args[0].equalsIgnoreCase("shop")) {
             options.addAll(List.of("fer", "or", "diamand", "emeraude"));
         } else if (args.length == 3 && args[0].equalsIgnoreCase("quickmenu")) {
             options.addAll(List.of("0", "1", "2", "3", "4", "5", "6", "7", "8"));
+        } else if (args.length == 3 && args[0].equalsIgnoreCase("leaderboard")) {
+            options.add("remove");
         } else if (args.length == 3) {
             if (args[0].equalsIgnoreCase("delete")) {
                 options.add("confirm");

@@ -1,6 +1,6 @@
 name: BedwarsPlugin
 main: com.bedwars.BedwarsPlugin
-version: 1.0.19
+version: 1.0.20
 api-version: '1.21'
 author: Claude
 description: Plugin BedWars entièrement configurable en jeu via /bd
