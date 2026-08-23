@@ -144,9 +144,11 @@ public class ShopConfigManager {
         setItemSilent("ranged", slot++, new ShopItem(Material.ARROW, 6, Material.GOLD_INGOT, 2));
         setItemSilent("ranged", slot, new ShopItem(Material.BOW, 1, Material.GOLD_INGOT, 12));
 
-        slot = 9;
-        setItemSilent("potions", slot++, new ShopItem(Material.POTION, 1, Material.EMERALD, 1));
-        setItemSilent("potions", slot, new ShopItem(Material.POTION, 1, Material.EMERALD, 2));
+        // Catégorie "potions" volontairement enregistrée sans article générique : son contenu
+        // (Force, Vitesse, Invisibilité, Saut, Soin) est entièrement fourni par SpecialShopItems,
+        // avec les vrais effets — les anciens articles de base (Material.POTION sans effet) ont
+        // été retirés.
+        if (!categoryOrder.contains("potions")) categoryOrder.add("potions");
 
         slot = 9;
         setItemSilent("utility", slot++, new ShopItem(Material.GOLDEN_APPLE, 1, Material.GOLD_INGOT, 3));

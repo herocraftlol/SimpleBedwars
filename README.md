@@ -7,7 +7,27 @@ PNJ vendeurs à skin de joueur, lobby d'attente flottant, pièges, boules de feu
 et classements des joueurs, mort subite avec dragons — le tout **sans aucune dépendance
 externe**.
 
-## ✨ Nouveautés de la v1.0.20
+## ✨ Nouveautés de la v1.0.21
+
+- **🔒 Coffres d'équipe vraiment privés** : les coffres enregistrés via
+  `/bd <nom> chest <couleur>` ne peuvent désormais être ouverts **que par leur équipe**
+  tant que celle-ci n'est pas totalement éliminée — fini le pillage de base en début de
+  partie. Un message clair prévient l'intrus, et les **coffres doubles** sont couverts même
+  si une seule moitié a été enregistrée. Une fois l'équipe éliminée, son coffre devient
+  pillable par tous, comme sur Hypixel.
+- **🧪 De vraies potions buvables** : les potions du shop (Force, Vitesse, Invisibilité,
+  Saut, Soin) sont maintenant de vraies potions **que l'on boit** — plus de potions
+  jetables par erreur aux pieds de ses coéquipiers.
+- **⚖️ Prix rééquilibrés** : les potions de **Force** et d'**Invisibilité** passent de
+  **4 à 2 émeraudes**, et l'**Arc (Puissance I)** coûte désormais **24 lingots d'or**
+  au lieu de 24 lingots de fer — un achat early-game enfin rentable.
+- **🧹 Onglet Potions nettoyé** : les anciens articles génériques sans effet ont été
+  retirés de la catégorie — seules les vraies potions avec leurs effets restent,
+  aux côtés de vos articles personnalisés.
+- **🛠️ Correctifs de compilation Paper 1.21** : imports et API `PlayerProfile` remis
+  d'équerre — le plugin compile proprement avec `mvn clean package`.
+
+### Nouveautés (v1.0.20)
 
 - **📊 Statistiques persistantes** : chaque joueur accumule désormais ses résultats d'une
   partie à l'autre (parties jouées, victoires, kills, final kills, lits détruits), sauvegardés

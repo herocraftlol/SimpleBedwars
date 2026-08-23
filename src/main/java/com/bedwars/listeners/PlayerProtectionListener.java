@@ -14,6 +14,8 @@ import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
+import java.util.Map;
+
 public class PlayerProtectionListener implements Listener {
 
     private final BedwarsPlugin plugin;
@@ -111,6 +113,58 @@ public class PlayerProtectionListener implements Listener {
             minY = Math.min(arena.getGamePos1().getY(), arena.getGamePos2().getY());
         }
         return minY - 15; // grosse marge : ne se déclenche qu'en cas de vraie chute hors de la map
+    }
+
+    /**
+     * Un coffre enregistré via /bd <nom> chest <couleur> est privé à son équipe : les autres
+     * joueurs ne peuvent pas l'ouvrir tant que cette équipe n'est pas totalement éliminée.
+     */
+    @EventHandler
+    public void onChestInteract(org.bukkit.event.player.PlayerInteractEvent event) {
+        if (event.getAction() != org.bukkit.event.block.Action.RIGHT_CLICK_BLOCK) return;
+        org.bukkit.block.Block block = event.getClickedBlock();
+        if (block == null) return;
+        if (block.getType() != org.bukkit.Material.CHEST && block.getType() != org.bukkit.Material.TRAPPED_CHEST) return;
+
+        Player player = event.getPlayer();
+        GameInstance game = plugin.getGameManager().findInstanceOf(player);
+        if (game == null) return;
+        Arena arena = game.getArena();
+
+        com.bedwars.arena.TeamColor owner = findOwningTeam(arena, block.getLocation());
+        if (owner == null) return; // pas un coffre d'équipe enregistré : pas concerné
+
+        com.bedwars.arena.TeamColor playerTeam = game.getTeamColor(player);
+        if (playerTeam == owner) return; // son propre coffre : toujours autorisé
+
+        com.bedwars.arena.ArenaTeam ownerTeam = arena.getTeams().get(owner);
+        if (ownerTeam != null && ownerTeam.isEliminated()) return; // équipe éliminée : coffre pillable
+
+        event.setCancelled(true);
+        player.sendMessage(ChatColor.RED + "Ce coffre appartient à l'équipe " + owner.getColoredName()
+                + ChatColor.RED + " : accessible seulement une fois cette équipe totalement éliminée.");
+    }
+
+    /**
+     * Retrouve l'équipe propriétaire d'un coffre à partir de sa position (tolère 1 bloc d'écart
+     * pour couvrir la seconde moitié d'un coffre double, même si seule une moitié a été enregistrée
+     * via /bd <nom> chest).
+     */
+    private com.bedwars.arena.TeamColor findOwningTeam(Arena arena, Location chestLoc) {
+        for (Map.Entry<com.bedwars.arena.TeamColor, com.bedwars.arena.ArenaTeam> entry : arena.getTeams().entrySet()) {
+            for (Location registered : entry.getValue().getChestLocations()) {
+                if (registered.getWorld() == null || !registered.getWorld().equals(chestLoc.getWorld())) continue;
+                boolean exact = registered.getBlockX() == chestLoc.getBlockX()
+                        && registered.getBlockY() == chestLoc.getBlockY()
+                        && registered.getBlockZ() == chestLoc.getBlockZ();
+                boolean adjacent = !exact
+                        && registered.getBlockY() == chestLoc.getBlockY()
+                        && Math.abs(registered.getBlockX() - chestLoc.getBlockX()) <= 1
+                        && Math.abs(registered.getBlockZ() - chestLoc.getBlockZ()) <= 1;
+                if (exact || adjacent) return entry.getKey();
+            }
+        }
+        return null;
     }
 
     @EventHandler

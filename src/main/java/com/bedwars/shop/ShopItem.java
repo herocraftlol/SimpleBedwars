@@ -45,8 +45,9 @@ public class ShopItem {
     }
 
     /** Potion jetable (SPLASH_POTION) d'un type et d'une durée précis, avec la couleur vanilla correspondante. */
+    /** Potion BUVABLE (Material.POTION, pas jetable) d'un type et d'une durée précis. */
     public static ShopItem potion(String displayName, PotionType type, int durationSeconds, Material currency, int price) {
-        return new ShopItem(Material.SPLASH_POTION, 1, currency, price, displayName, type, durationSeconds * 20, Map.of());
+        return new ShopItem(Material.POTION, 1, currency, price, displayName, type, durationSeconds * 20, Map.of());
     }
 
     /** Item avec des enchantements fixes (ex: arc Puissance I). */
