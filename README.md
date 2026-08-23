@@ -7,7 +7,20 @@ PNJ vendeurs à skin de joueur, lobby d'attente flottant, pièges, boules de feu
 et classements des joueurs, mort subite avec dragons — le tout **sans aucune dépendance
 externe**.
 
-## ✨ Nouveautés de la v1.0.21
+## ✨ Nouveautés de la v1.0.22
+
+- **🛠️ Compilation vérifiée de bout en bout** : le projet est désormais compilé et testé
+  avec `mvn clean package` sur l'API **Paper 1.21.1** — un import invalide
+  (`LeatherArmorMeta`) et un appel d'API inexistant (`PlayerProfile.complete`) ont été
+  corrigés. Le jar publié en release est garanti issu de ce code source, à l'octet près.
+- **🙂 Skins des PNJ marchands fiabilisés** : le chargement des têtes de joueur utilise
+  l'API moderne `PlayerProfile.update()`, toujours **hors thread principal** pour ne
+  jamais faire laguer le serveur pendant la requête vers les serveurs de Mojang.
+- **📦 Build reproductible** : version alignée partout (`pom.xml`, `plugin.yml`, tag Git)
+  et artefact `BedwarsPlugin.jar` généré par le shade-plugin, prêt à déposer dans
+  `plugins/`.
+
+### Nouveautés (v1.0.21)
 
 - **🔒 Coffres d'équipe vraiment privés** : les coffres enregistrés via
   `/bd <nom> chest <couleur>` ne peuvent désormais être ouverts **que par leur équipe**
